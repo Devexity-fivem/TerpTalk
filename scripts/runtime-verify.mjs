@@ -1016,13 +1016,21 @@ const main = async () => {
       : fail("discuss rl", dLast?.status)
 
     // Suggest — 60/min per hashed IP; rotating spoofed XFF must not evade.
+    // Batched: the assertion needs >60 requests inside one 60s window —
+    // sequential fetches against a remote dev DB can outlast the window
+    // and reset the counter before the limit is reached.
     let sLast = null
-    for (let i = 0; i < 65; i++) {
-      const res = await fetch(`${BASE}/api/search/suggest?q=ab`, {
-        headers: { "x-forwarded-for": `10.${i % 250}.${i % 250}.${i % 250}` },
-      })
-      sLast = res.status
-      if (sLast === 429) break
+    for (let i = 0; i < 65; i += 20) {
+      const statuses = await Promise.all(
+        Array.from({ length: Math.min(20, 65 - i) }, (_, j) => {
+          const n = i + j
+          return fetch(`${BASE}/api/search/suggest?q=ab`, {
+            headers: { "x-forwarded-for": `10.${n % 250}.${n % 250}.${n % 250}` },
+          }).then((r) => r.status).catch(() => 0)
+        })
+      )
+      if (statuses.includes(429)) { sLast = 429; break }
+      sLast = statuses[statuses.length - 1]
     }
     sLast === 429
       ? pass("ratelimit: suggest 429s; spoofed X-Forwarded-For cannot evade")
@@ -1051,10 +1059,17 @@ const main = async () => {
     // Sampled writes are random (~1/6 add 6), so crossing 60 takes ~66
     // requests on average but can need far more — 300 makes a miss
     // vanishingly unlikely while a real optimistic-allow hole still fails.
+    // Batched for the same reason as suggest above: sequential requests
+    // can outlast the 60s window on a remote dev DB and reset the count.
     let cDenied = 0
-    for (let i = 0; i < 300; i++) {
-      const cRes = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })
-      if (cRes.status === 429) { cDenied++; break }
+    for (let i = 0; i < 300 && !cDenied; i += 25) {
+      const statuses = await Promise.all(
+        Array.from({ length: Math.min(25, 300 - i) }, () =>
+          fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })
+            .then((r) => r.status).catch(() => 0)
+        )
+      )
+      if (statuses.includes(429)) cDenied++
     }
     const cDeniedAfter = cDenied > 0
       ? (await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })).status === 429

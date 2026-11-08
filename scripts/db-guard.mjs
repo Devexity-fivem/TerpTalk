@@ -80,6 +80,17 @@ export function evaluateDbTarget(rawUrl, env = process.env) {
   return { allowed: false, reason: `unrecognized database host "${host.split(".")[0]}…"` }
 }
 
+// Descriptive-only development connection shapes — evaluated on PARSED
+// URL components, never raw substrings. An attacker-controlled username,
+// password, path, or lookalike hostname must never satisfy these.
+const DEV_SUPABASE_REF = "ovztvfbvylcdpsuchvps"
+const DEV_SUPABASE_DIRECT_HOST = `db.${DEV_SUPABASE_REF}.supabase.co`
+const DEV_SUPABASE_POOLER_USER = `postgres.${DEV_SUPABASE_REF}`
+const DEV_NEON_HOST_RE = /^ep-old-breeze-[a-z0-9-]+(\.[a-z0-9-]+)*\.neon\.tech$/i
+const LOCAL_DESTRUCTIVE_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"])
+
+const refuseDestructive = (reason) => ({ allowed: false, reason })
+
 /**
  * Destructive-utility target check — strictly stronger than
  * evaluateDbTarget. For ops scripts that can wipe or rewrite data
@@ -89,33 +100,74 @@ export function evaluateDbTarget(rawUrl, env = process.env) {
  *   - NEVER honors environment overrides. ALLOW_PRODUCTION_DB_TESTS,
  *     ALLOW_UNRECOGNIZED_DB_TESTS and DB_GUARD_EXTRA_HOSTS are ignored —
  *     an operator cannot type their way into a destructive run.
- *   - Production markers refuse unconditionally.
- *   - Only the documented dev Supabase project, the retired dev Neon
- *     branch, and local Postgres are authorized.
+ *   - Production markers refuse unconditionally (raw-URL scan, so the
+ *     marker cannot hide in username, password, host, or path).
+ *   - Authorization is structural: the PARSED hostname and decoded
+ *     username must match an explicitly documented development
+ *     connection shape. Substring matches elsewhere in the URL do not
+ *     count, and no hostname prefix/suffix matching is used.
  *   - Anything else — including unparseable URLs — fails closed.
  *
  * @param {string|undefined|null} rawUrl
  * @returns {{ allowed: boolean, reason: string }}
  */
 export function evaluateDestructiveDbTarget(rawUrl) {
-  if (!rawUrl) return { allowed: false, reason: "no DATABASE_URL resolved" }
-  let host
+  if (!rawUrl || typeof rawUrl !== "string") {
+    return refuseDestructive("no DATABASE_URL resolved")
+  }
+  let u
   try {
-    host = new URL(rawUrl).hostname
+    u = new URL(rawUrl)
   } catch {
-    return { allowed: false, reason: "unparseable DATABASE_URL — cannot verify target" }
+    return refuseDestructive("unparseable DATABASE_URL — cannot verify target")
   }
-  if (!host) return { allowed: false, reason: "URL has no host" }
-  if (PROD_URL_MARKERS.some((m) => rawUrl.includes(m))) {
-    return { allowed: false, reason: "production database endpoint — destructive utilities are development-only" }
+  const scheme = u.protocol.toLowerCase()
+  if (scheme !== "postgres:" && scheme !== "postgresql:") {
+    return refuseDestructive(`non-postgres scheme "${scheme}"`)
   }
+  let host
+  let user
+  try {
+    host = u.hostname.toLowerCase()
+    user = decodeURIComponent(u.username).toLowerCase()
+  } catch {
+    return refuseDestructive("malformed URL credentials — cannot verify target")
+  }
+  if (!host) return refuseDestructive("URL has no host")
+
+  // Production barrier — unconditional, scanned across the whole raw URL
+  // so the marker cannot be relocated into credentials, host, or path.
+  if (PROD_URL_MARKERS.some((m) => rawUrl.toLowerCase().includes(m))) {
+    return refuseDestructive("production database endpoint — destructive utilities are development-only")
+  }
+
+  // Documented dev Supabase DIRECT connection — the hostname itself names
+  // the exact dev project.
+  if (host === DEV_SUPABASE_DIRECT_HOST) {
+    return { allowed: true, reason: "authorized development target (dev Supabase direct)" }
+  }
+
+  // Documented dev Supabase POOLED connection — shared pooler hostname is
+  // only authorized when the decoded PostgreSQL username carries the
+  // exact dev project tenant.
   if (
-    SAFE_URL_MARKERS.some((m) => rawUrl.includes(m)) ||
-    SAFE_HOST_MARKERS.some((m) => host === m || host.startsWith(m) || host.endsWith(`.${m}`))
+    (host === "pooler.supabase.com" || host.endsWith(".pooler.supabase.com")) &&
+    user === DEV_SUPABASE_POOLER_USER
   ) {
-    return { allowed: true, reason: "authorized development target" }
+    return { allowed: true, reason: "authorized development target (dev Supabase pooler)" }
   }
-  return { allowed: false, reason: `unrecognized database host "${host.split(".")[0]}…"` }
+
+  // Retired dev Neon endpoint — bounded hostname pattern only.
+  if (DEV_NEON_HOST_RE.test(host)) {
+    return { allowed: true, reason: "authorized development target (retired dev Neon)" }
+  }
+
+  // Exact local PostgreSQL hosts only — no prefixes, suffixes, or tricks.
+  if (LOCAL_DESTRUCTIVE_HOSTS.has(host)) {
+    return { allowed: true, reason: "authorized development target (local PostgreSQL)" }
+  }
+
+  return refuseDestructive(`unrecognized database host "${host.split(".")[0]}…"`)
 }
 
 // Side effect — refuse early on import when the resolved target is not

@@ -67,6 +67,79 @@ await check("production refusal is unconditional — no env input exists", () =>
     assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
   }
 })
+await check("dev Supabase direct connection is authorized", () => {
+  assert.equal(
+    evaluateDestructiveDbTarget("postgresql://postgres:pw@db.ovztvfbvylcdpsuchvps.supabase.co:5432/postgres").allowed,
+    true
+  )
+})
+await check("IPv6 localhost is authorized", () => {
+  assert.equal(evaluateDestructiveDbTarget("postgresql://u:p@[::1]:5432/db").allowed, true)
+})
+await check("adversarial: dev marker in username cannot authorize foreign host", () => {
+  for (const url of [
+    "postgresql://postgres.ovztvfbvylcdpsuchvps:pw@db.evil.example.com:5432/app",
+    "postgresql://ovztvfbvylcdpsuchvps:pw@db.evil.example.com:5432/app",
+  ]) {
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
+await check("adversarial: dev marker in password cannot authorize foreign host", () => {
+  assert.equal(
+    evaluateDestructiveDbTarget("postgresql://u:ovztvfbvylcdpsuchvps@db.evil.example.com:5432/app").allowed,
+    false
+  )
+})
+await check("adversarial: dev marker in path/query cannot authorize foreign host", () => {
+  for (const url of [
+    "postgresql://u:p@db.evil.example.com:5432/app?options=ovztvfbvylcdpsuchvps",
+    "postgresql://u:p@db.evil.example.com:5432/ovztvfbvylcdpsuchvps",
+    "postgresql://u:p@db.evil.example.com:5432/app#ovztvfbvylcdpsuchvps",
+  ]) {
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
+await check("adversarial: localhost hostname lookalikes are refused", () => {
+  for (const host of ["localhost.attacker.example", "attackerlocalhost.example", "localhost.", "mylocalhost"]) {
+    const url = `postgresql://u:p@${host}:5432/app`
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
+await check("adversarial: dev host as subdomain of attacker domain is refused", () => {
+  for (const url of [
+    "postgresql://u:p@db.ovztvfbvylcdpsuchvps.attacker.example:5432/app",
+    "postgresql://u:p@ovztvfbvylcdpsuchvps.supabase.co.attacker.example:5432/app",
+    "postgresql://u:p@notdb.ovztvfbvylcdpsuchvps.supabase.co:5432/app",
+    "postgresql://u:p@ovztvfbvylcdpsuchvps.supabase.co:5432/app",
+  ]) {
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
+await check("adversarial: pooler host requires the exact dev tenant username", () => {
+  for (const url of [
+    // wrong project tenant on a real pooler hostname
+    "postgresql://postgres.dtlksgtsvdfhgsiuktbt:pw@aws-0-us-east-1.pooler.supabase.com:6543/app",
+    "postgresql://postgres.unknownref000:pw@aws-0-us-east-1.pooler.supabase.com:6543/app",
+    "postgresql://postgres:pw@aws-0-us-east-1.pooler.supabase.com:6543/app",
+    // dev tenant but pooler-lookalike hostname
+    "postgresql://postgres.ovztvfbvylcdpsuchvps:pw@aws-0-us-east-1.pooler.supabase.com.attacker.example:6543/app",
+    "postgresql://postgres.ovztvfbvylcdpsuchvps:pw@pooler.supabase.com.attacker.example:6543/app",
+    "postgresql://postgres.ovztvfbvylcdpsuchvps.evil:pw@aws-0-us-east-1.pooler.supabase.com:6543/app",
+  ]) {
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
+await check("adversarial: non-postgres schemes and malformed URLs fail closed", () => {
+  for (const url of [
+    "mysql://u:p@localhost:3306/app",
+    "https://db.ovztvfbvylcdpsuchvps.supabase.co/app",
+    "postgres://",
+    "postgresql://u:p@/app",
+    "postgresql://u:p@localhost:notaport/app",
+  ]) {
+    assert.equal(evaluateDestructiveDbTarget(url).allowed, false, url)
+  }
+})
 
 // ── isSafeBackupRelPath ────────────────────────────────────────────
 await check("manifest paths must stay inside the backup dir", () => {

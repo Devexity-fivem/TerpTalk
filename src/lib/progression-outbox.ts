@@ -8,6 +8,8 @@ import {
   reverseProgressionBySource,
   reverseProgressionByKey,
   reverseProgressionByActor,
+  reinstateProgressionByKey,
+  keyResumeExists,
   ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
 import { logSecurityEvent } from "@/lib/security"
@@ -138,7 +140,26 @@ export async function drainXpOne(id: string): Promise<boolean> {
     if (row.kind === "SOURCE" && row.sourceType && row.sourceId) {
       await reverseProgressionBySource(row.sourceType, row.sourceId, row.reason, row.requestedBy ?? undefined)
     } else if (row.kind === "KEY" && row.eventKey) {
+      // Ordering guard: a KEY_RESUMED marker newer than enqueuedAt proves
+      // the interaction was re-created after this intent was enqueued —
+      // the intent is stale and must not strip the live grant. The intent
+      // row is completed (audit preserved), never silently dropped.
+      if (await keyResumeExists(row.eventKey, row.enqueuedAt)) {
+        await prisma.pendingXpReversal.delete({ where: { id } }).catch(() => {})
+        return true
+      }
       await reverseProgressionByKey(row.eventKey, row.reason, row.requestedBy ?? undefined)
+      // A resume marker may have landed while the reversal was in flight.
+      // If so the reversal was stale — reinstate so the re-created
+      // interaction keeps its grant; reversal+reinstate rows keep the
+      // full audit trail.
+      if (await keyResumeExists(row.eventKey, row.enqueuedAt)) {
+        // Throws propagate to the outer catch → intent requeues for retry
+        // rather than being dropped with the grant still reversed.
+        await reinstateProgressionByKey(row.eventKey)
+        await prisma.pendingXpReversal.delete({ where: { id } }).catch(() => {})
+        return true
+      }
     } else if (row.kind === "ACTOR" && row.actorId) {
       await reverseProgressionByActor(row.actorId, row.reason, { before: row.enqueuedAt, requestedBy: row.requestedBy ?? undefined })
     }

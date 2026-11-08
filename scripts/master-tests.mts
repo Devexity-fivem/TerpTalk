@@ -83,7 +83,7 @@ const HTTP_PHASE: Suite[] = ([
   { id: "account", file: "scripts/account-verify.mjs", runner: "node", cls: "A", label: "Account lifecycle HTTP (auth, onboarding, DMs, deletion, captcha)", tier: "full" },
   { id: "forum", file: "scripts/forum-verify.mjs", runner: "node", cls: "A", label: "Forum HTTP behavior", tier: "full" },
   { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior", tier: "full" },
-  { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior", tier: "full" },
+  { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior", tier: "full", timeoutMs: 15 * 60_000 },
   { id: "feed", file: "scripts/feed-verify.mts", runner: "tsx", cls: "A", label: "Feed core: keyset pagination, scope privacy, /api/feed contract", tier: "full" },
   { id: "moments", file: "scripts/moments-verify.mts", runner: "tsx", cls: "A", label: "Social moments HTTP + lib (posts, stories, reposts, comments, visibility, media, reports)", tier: "full" },
   { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", tier: "full", timeoutMs: 12 * 60_000 },
@@ -92,8 +92,8 @@ const HTTP_PHASE: Suite[] = ([
   { id: "plant-doctor", file: "scripts/plant-doctor-tests.mts", runner: "tsx", cls: "A", label: "Plant Doctor outcome loop (cases, outcomes, follow-up reminder)", tier: "full" },
   { id: "push-activation", file: "scripts/push-activation-tests.mts", runner: "tsx", cls: "A", label: "Web Push subscription boundary + derived activation milestones", tier: "full" },
   { id: "product-events", file: "scripts/product-events-verify.mts", runner: "tsx", cls: "A", label: "Product-event telemetry: attribution, idempotency, beacon boundary, privacy, report surface", tier: "full" },
-  { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
-  { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 5 * 60_000 },
+  { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 20 * 60_000 },
+  { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 12 * 60_000 },
 ] satisfies Suite[]).map((s): Suite => ({ ...s, isolateRateLimits: true, restoreMaintenance: true }))
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global

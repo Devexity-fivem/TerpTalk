@@ -109,7 +109,7 @@ import {
   PUBLIC_XP_TYPES,
   publicXpLabel,
 } from "@/lib/progression-config"
-import { drainPendingXpReversals, reverseXpSourceDurable } from "@/lib/progression-outbox"
+import { drainPendingXpReversals, reverseXpSourceDurable, enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 
 const RUN_TAG = Date.now().toString(36)
 const TEST_USERNAME = `__test_rep_${RUN_TAG}`
@@ -2039,6 +2039,149 @@ async function run() {
       assert.equal(new Set(keys).size, keys.length, "fallback: no duplicate keys")
     }
 
+    // ── V4: stale KEY-reversal ordering — follow + reaction lifecycles ──
+    // Removal enqueues a durable KEY reversal whose drain is post-commit
+    // and may be delayed or crash. Re-creating the interaction first must
+    // not lose the grant: awardProgression leaves a KEY_RESUMED marker
+    // that lets the drain supersede (or repair) the stale intent. These
+    // drive the same lib calls the routes make — follow/reaction rows,
+    // awardProgression, enqueueXpReversal, drainXpOne.
+    const keyLedger = async (key: string) => {
+      const orig = await prisma.progressionEvent.findUnique({ where: { key } })
+      const markers = await prisma.progressionEvent.findMany({
+        where: { key: { startsWith: `${key}:resumed:` } },
+        select: { id: true },
+      })
+      const descendants = orig
+        ? await prisma.progressionEvent.findMany({
+            where: { reversalOfId: orig.id },
+            select: { type: true, standing: true, reversedAt: true },
+          })
+        : []
+      return { orig, markers, descendants }
+    }
+
+    // FOLLOW lifecycle: delayed drain must not strip a re-created follow.
+    {
+      const follower = await mkPv2("ord-f", 3) // grantor age > 24h floor
+      const followed = await mkPv2("ord-u")
+      await seedProgression(follower, 0, 100) // Trusted grantor → no floor halving
+      const key = `follow:${follower}:user:${followed}`
+      const doFollow = () =>
+        awardProgression(followed, "FOLLOWER_GAINED", "A grower followed you", {
+          actorId: follower, key, sourceType: "USER", sourceId: followed,
+        })
+      const followRow = { followerId: follower, followingId: followed }
+
+      await prisma.follow.create({ data: followRow })
+      const aw1 = await doFollow()
+      assert.ok(aw1.awarded, "follow award pays standing")
+      let led = await keyLedger(key)
+      assert.equal(led.orig!.standing, XP_TABLE.FOLLOWER_GAINED.standing)
+      assert.equal(led.orig!.reversedAt, null)
+      assert.equal((await pv2Profile(followed))!.standing, XP_TABLE.FOLLOWER_GAINED.standing)
+
+      // Unfollow with the drain DELAYED — the durable-intent scenario.
+      let intentId = ""
+      await prisma.$transaction(async (tx) => {
+        await tx.follow.delete({ where: { followerId_followingId: followRow } })
+        intentId = await enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+      })
+      assert.equal((await keyLedger(key)).orig!.reversedAt, null, "pending intent has not reversed yet")
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 1)
+
+      // Re-follow before the drain — idempotent award + resume marker.
+      await prisma.follow.create({ data: followRow })
+      const aw2 = await doFollow()
+      assert.ok(!aw2.awarded && aw2.skippedReason === "duplicate", "re-follow stays idempotent")
+      assert.equal((await keyLedger(key)).markers.length, 1, "resume marker recorded")
+
+      // The stale intent drains — superseded, live grant survives.
+      assert.equal(await drainXpOne(intentId), true)
+      led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null, "stale reversal did not strip the live grant")
+      assert.equal(led.descendants.filter((d) => d.type === "REVERSAL").length, 0, "no reversal row written")
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      assert.equal((await pv2Profile(followed))!.standing, XP_TABLE.FOLLOWER_GAINED.standing, "standing intact")
+      assert.equal(await prisma.follow.count({ where: followRow }), 1, "one active follow")
+
+      // Unfollow again with an immediate drain — the older marker must NOT
+      // supersede this newer intent (enqueuedAt bound), so it reverses.
+      await prisma.$transaction(async (tx) => {
+        await tx.follow.delete({ where: { followerId_followingId: followRow } })
+        intentId = await enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+      })
+      assert.equal(await drainXpOne(intentId), true)
+      led = await keyLedger(key)
+      assert.ok(led.orig!.reversedAt, "genuinely removed follow reverses")
+      assert.equal((await pv2Profile(followed))!.standing, 0)
+
+      // Re-follow after a completed reversal — standard reinstate path.
+      await prisma.follow.create({ data: followRow })
+      const aw3 = await doFollow()
+      assert.ok(aw3.awarded && aw3.reinstated, "re-follow reinstates the grant")
+      led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null)
+      assert.equal((await pv2Profile(followed))!.standing, XP_TABLE.FOLLOWER_GAINED.standing, "reinstated standing restored")
+      const activeGrants = await prisma.progressionEvent.count({
+        where: { key, reversedAt: null, reversalOfId: null },
+      })
+      assert.equal(activeGrants, 1, "exactly one active grant for the key")
+    }
+
+    // MOMENT_REACTION lifecycle: same ordering guarantee on reaction keys.
+    {
+      const reactor = await mkPv2("ord-r", 3)
+      const author = await mkPv2("ord-a")
+      await seedProgression(reactor, 0, 100)
+      const moment = await prisma.moment.create({ data: { authorId: author, content: `ordering ${RUN_TAG}` } })
+      const key = `react:${reactor}:moment:${moment.id}`
+      const doReact = () =>
+        awardProgression(author, "MOMENT_REACTION_RECEIVED", "Someone reacted to your content", {
+          actorId: reactor, key, sourceType: "MOMENT", sourceId: moment.id,
+          meta: { reactionType: "LIKE" },
+        })
+      const reactionRow = { userId: reactor, momentId: moment.id }
+
+      await prisma.reaction.create({ data: { type: "LIKE", ...reactionRow } })
+      const r1 = await doReact()
+      assert.ok(r1.awarded, "reaction award pays standing")
+      assert.equal((await pv2Profile(author))!.standing, XP_TABLE.MOMENT_REACTION_RECEIVED.standing)
+
+      // Toggle-off with delayed drain, then re-add before it runs.
+      let intentId = ""
+      await prisma.$transaction(async (tx) => {
+        await tx.reaction.delete({ where: { userId_momentId: reactionRow } })
+        intentId = await enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Reaction removed", requestedBy: reactor })
+      })
+      await prisma.reaction.create({ data: { type: "LIKE", ...reactionRow } })
+      const r2 = await doReact()
+      assert.ok(!r2.awarded && r2.skippedReason === "duplicate", "re-add stays idempotent")
+      assert.equal(await drainXpOne(intentId), true)
+      const orig = await prisma.progressionEvent.findUnique({ where: { key } })
+      assert.equal(orig!.reversedAt, null, "stale reversal did not strip the re-added reaction")
+      assert.equal((await pv2Profile(author))!.standing, XP_TABLE.MOMENT_REACTION_RECEIVED.standing)
+      assert.equal(await prisma.reaction.count({ where: reactionRow }), 1)
+
+      // Toggle cycle with immediate drain → reverse, then re-add → reinstate.
+      await prisma.$transaction(async (tx) => {
+        await tx.reaction.delete({ where: { userId_momentId: reactionRow } })
+        intentId = await enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Reaction removed", requestedBy: reactor })
+      })
+      assert.equal(await drainXpOne(intentId), true)
+      assert.ok((await prisma.progressionEvent.findUnique({ where: { key } }))!.reversedAt, "removed reaction reverses")
+      assert.equal((await pv2Profile(author))!.standing, 0)
+      await prisma.reaction.create({ data: { type: "LIKE", ...reactionRow } })
+      const r3 = await doReact()
+      assert.ok(r3.awarded && r3.reinstated, "re-added reaction reinstates")
+      assert.equal((await pv2Profile(author))!.standing, XP_TABLE.MOMENT_REACTION_RECEIVED.standing)
+      assert.equal(
+        await prisma.progressionEvent.count({ where: { key, reversedAt: null, reversalOfId: null } }),
+        1,
+        "exactly one active grant for the reaction key"
+      )
+    }
+
     // Progression drift invariant on fixtures: xp == Σ ledger.
     for (const uid of pv2) {
       const p = await prisma.profile.findUnique({ where: { userId: uid }, select: { xp: true, standing: true } })
@@ -2057,6 +2200,11 @@ async function run() {
     // AbuseFlag.userId is a bare string — no cascade, clean explicitly.
     await prisma.abuseFlag.deleteMany({
       where: { OR: [{ userId: { in: pv2 } }, { counterpartyId: { in: pv2 } }] },
+    }).catch(() => {})
+    // PendingXpReversal has no user FK — outbox intents must be cleaned
+    // explicitly or a failed run leaves durable rows behind.
+    await prisma.pendingXpReversal.deleteMany({
+      where: { OR: [{ requestedBy: { in: pv2 } }, { actorId: { in: pv2 } }] },
     }).catch(() => {})
     await prisma.userAchievement.deleteMany({ where: { userId: { in: pv2 } } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: pv2 } } }).catch(() => {})

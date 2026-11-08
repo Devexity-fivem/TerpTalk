@@ -173,6 +173,19 @@ const main = async () => {
     where: { OR: [{ key: { startsWith: "login" } }] },
   }).catch(() => {})
 
+  // Warm dev-server route compilation before the browser phase.
+  // Turbopack compiles each route on first hit — a cold compile can reset
+  // or stall a Chromium navigation (net::ERR_ABORTED) and leave streamed
+  // RSC content unsettled past the selector timeouts. Plain fetches run
+  // the same server-side compile without a browser; 404s still compile.
+  for (const p of [
+    "/", "/auth/signin", "/feed", "/diaries/__warmup__", "/forum/thread/__warmup__",
+    "/u/__warmup__", "/profile", "/settings", "/messages", "/reputation",
+    "/plant-doctor", "/knowledge-center", "/chat", "/grow-room",
+  ]) {
+    await fetch(`${BASE}${p}`, { signal: AbortSignal.timeout(120_000) }).catch(() => null)
+  }
+
   const browser = await chromium.launch({ headless: true })
   // DOMContentLoaded resolves before streamed RSC content attaches —
   // asserting on counts immediately after it raced hydration under load
