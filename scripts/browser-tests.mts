@@ -916,7 +916,11 @@ const main = async () => {
     ok("mobile: home renders without horizontal overflow at 390px", !overflowX)
     ok("mobile: nav menu toggle present", (await mobPage.locator('button[aria-label*="navigation menu"], a[href="/auth/signin"]').count()) >= 1)
     ok("mobile: bottom nav shows Feed at 390px", (await mobPage.locator('nav[aria-label="Primary"] a[href="/feed"]').count()) >= 1)
-    ok("mobile: bottom nav still shows Diaries and Chat", (await mobPage.locator('nav[aria-label="Primary"] a[href="/diaries"]').count()) >= 1 && (await mobPage.locator('nav[aria-label="Primary"] a[href="/chat"]').count()) >= 1)
+    // Field Journal dock: Home · Feed · Create · Chat · Alerts/Discover · You.
+    // Diaries/forums live in the header drawer, not the dock.
+    ok("mobile: bottom nav carries the dock destinations", (await mobPage.locator('nav[aria-label="Primary"] a[href="/"]').count()) >= 1 && (await mobPage.locator('nav[aria-label="Primary"] a[href="/chat"]').count()) >= 1 && (await mobPage.locator('nav[aria-label="Primary"] button[aria-label="Share something"]').count()) >= 1)
+    await mobPage.locator('button[aria-label="Open navigation menu"]').click()
+    ok("mobile: diaries reachable via nav drawer at 390px", (await mobPage.locator('#tt-nav-drawer a[href="/diaries"]').count()) >= 1)
     await gotoMain(mobPage, `${BASE}/feed`)
     const feedOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     ok("mobile: /feed renders without overflow at 390px", !feedOverflow)
