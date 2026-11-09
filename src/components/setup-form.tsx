@@ -67,6 +67,19 @@ const MAX_IMAGES = 6
 const fieldInput =
   "w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
 
+// Field-group header — eyebrow label over a serif subhead, matching the
+// diary form's journal sections. The setup form reads in the same
+// movements the detail page groups equipment into.
+function FieldGroupHead({ eyebrow, title, hint }: { eyebrow: string; title: string; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <span className="tt-eyebrow">{eyebrow}</span>
+      <h3 className="font-display font-semibold text-lg mt-1.5 tracking-tight">{title}</h3>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
+
 async function resizePhoto(file: File): Promise<string> {
   const img = new Image()
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -142,10 +155,14 @@ export default function SetupForm({
   const totalImages = kept.length + photos.length
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Information */}
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {/* ── Identity — what this room runs ─────────────────────────── */}
       <div className="space-y-4">
-        <h3 className="font-display font-semibold text-lg">Basic Information</h3>
+        <FieldGroupHead
+          eyebrow="Identity"
+          title="The setup"
+          hint="Name the room and note what's growing in it."
+        />
 
         <div>
           <label htmlFor="title" className="block text-sm font-medium mb-2">
@@ -193,20 +210,36 @@ export default function SetupForm({
         </div>
       </div>
 
-      {/* Equipment Details */}
-      <div className="space-y-4">
-        <h3 className="font-display font-semibold text-lg">Equipment Details</h3>
+      {/* ── Environment — the room itself ──────────────────────────── */}
+      <div className="space-y-4 border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Environment"
+          title="The room"
+          hint="Space, tent, airflow, and climate control."
+        />
 
         <div className="grid md:grid-cols-2 gap-4">
           {specField("space", "Grow Space", "e.g., 4x4 tent, 10x10 room")}
           {specField("tent", "Tent/Greenhouse", "e.g., Gorilla Grow Tent 4x4")}
-          {specField("lighting", "Lighting", "e.g., LED 600W, HPS 1000W")}
           {specField("ventilation", "Ventilation", "e.g., 6 inch inline fan, carbon filter")}
           {specField("fans", "Fans", "e.g., Oscillating fans, clip-on fans")}
+          {specField("controllers", "Environmental Controllers", "e.g., Temperature controller, humidity controller")}
+        </div>
+      </div>
+
+      {/* ── Equipment — light and root zone ────────────────────────── */}
+      <div className="space-y-4 border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Equipment"
+          title="Light & feeding"
+          hint="The hardware that drives the canopy and feeds the roots."
+        />
+
+        <div className="grid md:grid-cols-2 gap-4">
+          {specField("lighting", "Lighting", "e.g., LED 600W, HPS 1000W")}
           {specField("containers", "Containers", "e.g., 5 gallon fabric pots, 10L smart pots")}
           {specField("medium", "Growing Medium", "e.g., Living soil, Coco coir, Hydroponics")}
           {specField("nutrients", "Nutrients", "e.g., Fox Farm, Advanced Nutrients")}
-          {specField("controllers", "Environmental Controllers", "e.g., Temperature controller, humidity controller")}
         </div>
 
         <div>
@@ -224,9 +257,13 @@ export default function SetupForm({
         </div>
       </div>
 
-      {/* Photos */}
-      <div>
-        <label className="block text-sm font-medium mb-2">Photos (up to {MAX_IMAGES})</label>
+      {/* ── Photos ─────────────────────────────────────────────────── */}
+      <div className="border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Photos"
+          title="Show the room"
+          hint={`Up to ${MAX_IMAGES} photos — wide shots of the tent and close-ups of the gear help most.`}
+        />
         <div className="flex items-center gap-3 flex-wrap">
           {kept.map((img) => (
             <div key={img.id} className="relative">
