@@ -1,6 +1,11 @@
 import Link from "next/link"
+import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { buildMetadata } from "@/lib/seo"
 import { Sprout, ArrowRight, Check, X } from "@/lib/icons"
+
+// ISR — the strain count refreshes hourly alongside its data cache.
+export const revalidate = 3600
 
 export const metadata = buildMetadata({
   title: "TerpTalk vs GrowDiaries & legacy grow forums",
@@ -9,14 +14,23 @@ export const metadata = buildMetadata({
   pathname: "/compare",
 })
 
+// Live catalog size — the comparison table cites a real number, cached
+// so the marketing page never hits the DB per request.
+const getStrainCount = unstable_cache(
+  async () => prisma.strain.count(),
+  ["compare-strain-count"],
+  { revalidate: 3600, tags: ["strains"] }
+)
+
 // Honest matrix — check means the platform has a real implementation,
 // "Partial" means it exists but is thin. Keep claims verifiable: users who
-// try us must find the checked row actually works.
+// try us must find the checked row actually works. The strain-catalog row
+// is filled with the live count at render time — never a hardcoded figure.
 const ROWS: { feature: string; terptalk: string | true; gd: string | boolean | "Partial"; forums: string | boolean | "Partial" }[] = [
   { feature: "Structured week-by-week grow logs", terptalk: true, gd: true, forums: "Partial" },
   { feature: "Environment metrics (VPD, PPFD, CO2, runoff, trichomes)", terptalk: true, gd: "Partial", forums: false },
   { feature: "Real community forum with accepted answers", terptalk: true, gd: "Partial", forums: true },
-  { feature: "Strain catalog with linked grow data", terptalk: "658 strains", gd: true, forums: false },
+  { feature: "Strain catalog with linked grow data", terptalk: "STRAIN_COUNT", gd: true, forums: false },
   { feature: "Progression, badges & grower levels", terptalk: true, gd: false, forums: false },
   { feature: "Plant Doctor & deterministic grow assistant", terptalk: true, gd: false, forums: false },
   { feature: "Draft auto-save in the log editor", terptalk: true, gd: true, forums: false },
@@ -37,7 +51,13 @@ function Cell({ v }: { v: string | boolean }) {
   return <span className="text-xs font-semibold text-primary">{v}</span>
 }
 
-export default function ComparePage() {
+export default async function ComparePage() {
+  const strainCount = await getStrainCount()
+  const rows = ROWS.map((r) =>
+    r.terptalk === "STRAIN_COUNT"
+      ? { ...r, terptalk: `${strainCount.toLocaleString("en-US")} strains` }
+      : r
+  )
   return (
     <div className="min-h-screen bg-background">
       <div className="relative overflow-hidden px-4 pt-14 pb-10 sm:px-6 lg:px-8">
@@ -60,7 +80,8 @@ export default function ComparePage() {
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pb-16">
         <div className="tt-spotlight tt-edge-card overflow-hidden rounded-2xl border border-border/70 bg-card/80">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-border/60 text-left">
                 <th className="px-4 py-3 font-semibold">Feature</th>
@@ -70,7 +91,7 @@ export default function ComparePage() {
               </tr>
             </thead>
             <tbody>
-              {ROWS.map((r) => (
+              {rows.map((r) => (
                 <tr key={r.feature} className="border-b border-border/40 last:border-0">
                   <td className="px-4 py-2.5">{r.feature}</td>
                   <td className="px-3 py-2.5 text-center"><Cell v={r.terptalk} /></td>
@@ -80,6 +101,7 @@ export default function ComparePage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground text-center">

@@ -97,7 +97,16 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
   }
 
-  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, knowledge, myDiaries, contextGrowers] = await Promise.all([
+  // Related catalog entries — same breeder is the strongest real
+  // relation; when no breeder is reported, same type is the fallback.
+  // Both are catalog facts, never inferred lineage.
+  const relatedWhere = strain.breeder
+    ? { breeder: { equals: strain.breeder, mode: "insensitive" as const }, id: { not: strain.id } }
+    : strain.type
+      ? { type: { equals: strain.type, mode: "insensitive" as const }, id: { not: strain.id } }
+      : null
+
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, knowledge, myDiaries, contextGrowers, relatedStrains] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -182,6 +191,26 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       contextOnly: true,
       context: { strainIds: [strain.id], strainNames: [strain.name] },
     }),
+    relatedWhere
+      ? prisma.strain.findMany({
+          where: relatedWhere,
+          orderBy: { name: "asc" },
+          take: 4,
+          include: {
+            photos: {
+              where: { user: activeAuthor() },
+              take: 1,
+              orderBy: { createdAt: "desc" },
+            },
+            _count: {
+              select: {
+                photos: { where: { user: activeAuthor() } },
+                diaries: { where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ])
 
   // Canonical community knowledge — outcomes, questions, notable harvests.
@@ -282,6 +311,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               </div>
             )}
             <div>
+              <div className="tt-eyebrow mb-2">Strain profile</div>
               <h1 className="font-display text-3xl font-bold tracking-tight wrap-break-word">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                 {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strainTypeLabel(strain.type)}</span>}
@@ -947,6 +977,58 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             </SectionCard>
           )
         })}
+
+        {/* Related catalog entries — same breeder when reported, else
+            same type. Real rows only; hidden entirely when the catalog
+            has nothing related to show. */}
+        {relatedStrains.length > 0 && (
+          <SectionCard spotlight
+            className="mb-6"
+            title={strain.breeder ? `More from ${strain.breeder}` : `More ${strainTypeLabel(strain.type)} strains`}
+            actions={
+              <Link
+                href={strain.breeder ? breederPath(strain.breeder) : "/strains"}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Browse catalog →
+              </Link>
+            }
+          >
+            <div className="grid sm:grid-cols-2 gap-3">
+              {relatedStrains.map((s) => {
+                const meta = [
+                  s.type ? strainTypeLabel(s.type) : null,
+                  s.breeder,
+                  s.thcMin != null || s.thcMax != null
+                    ? s.thcMin != null && s.thcMax != null
+                      ? `${s.thcMin}–${s.thcMax}% THC`
+                      : `~${s.thcMin ?? s.thcMax}% THC`
+                    : null,
+                ].filter(Boolean).join(" · ")
+                return (
+                  <Link
+                    key={s.id}
+                    href={strainPath(s)}
+                    className="group flex items-center gap-3 rounded-xl border border-border/70 p-2.5 transition-colors hover:border-primary/40 hover:bg-secondary/40"
+                  >
+                    <span className="w-12 h-12 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">
+                      {s.photos[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.photos[0].imageUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      ) : (
+                        <Leaf className="w-4 h-4 text-muted-foreground/60" aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium truncate group-hover:text-primary transition-colors">{s.name}</span>
+                      {meta && <span className="block text-[11px] text-muted-foreground truncate">{meta}</span>}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          </SectionCard>
+        )}
 
         </div>{/* end main column */}
 

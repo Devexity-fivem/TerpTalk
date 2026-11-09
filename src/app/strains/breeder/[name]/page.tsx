@@ -2,11 +2,12 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { unstable_cache } from "next/cache"
-import { Leaf, Dna, Sprout } from "@/lib/icons"
+import { Leaf, Dna, Sprout, ImageIcon, CheckCircle2 } from "@/lib/icons"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import EmptyState from "@/components/ui/empty-state"
 import StrainCard from "@/components/strain-card"
+import StatStrip from "@/components/ui/stat-strip"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { buildMetadata } from "@/lib/seo"
 import { normalizeBreederName, breederKeyFromSlug, breederPath } from "@/lib/breeders"
@@ -117,17 +118,27 @@ export default async function BreederPage({ params }: { params: Promise<{ name: 
           { label: canonical },
         ]} />
 
-        <div className="mb-8">
+        <div className="mb-6">
           <span className="tt-eyebrow">Breeder</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight flex items-center gap-3">
             <Dna className="w-8 h-8 text-spectrum" /> {canonical}
           </h1>
           <p className="text-muted-foreground">
-            {strains.length} strain{strains.length === 1 ? "" : "s"} in the community catalog
-            {totals.grows > 0 && <> · {totals.grows} public grow{totals.grows === 1 ? "" : "s"}</>}
-            {harvested > 0 && <> · {harvested} harvested</>}
+            Strains in the community catalog, with public grows and reported characteristics
           </p>
         </div>
+
+        {/* Catalog at a glance — every number is a real aggregate over
+            this breeder's public records. */}
+        <StatStrip
+          className="mb-8"
+          items={[
+            { label: "Strains", value: strains.length, icon: Leaf },
+            { label: "Public grows", value: totals.grows, icon: Sprout, href: "/diaries" },
+            { label: "Photos", value: totals.photos, icon: ImageIcon },
+            { label: "Harvested", value: harvested, icon: CheckCircle2 },
+          ]}
+        />
 
         {strains.length === 0 ? (
           <div className="bg-card/80 rounded-2xl border border-border/70">

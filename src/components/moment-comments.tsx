@@ -10,12 +10,14 @@ import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { MessageSquare, Loader2, Send, Trash2 } from "@/lib/icons"
 import TimeAgo from "@/components/ui/time-ago"
+import { Avatar } from "@/components/ui/avatar"
 import RoleBadge from "@/components/role-badge"
 import MomentText from "@/components/moment-text"
 import ReportButton from "@/components/report-button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { useToast } from "@/components/ui/toast"
 import { signInHref } from "@/lib/callback-url"
+import { cn } from "@/lib/utils"
 import { MOMENT_COMMENT_MAX } from "@/lib/moment-shared"
 
 export interface MomentCommentItem {
@@ -86,19 +88,33 @@ export default function MomentComments({
 
   return (
     <div id="comments" className="space-y-4">
-      <div className="space-y-4">
+      <div className="divide-y divide-border/50">
         {comments.map((c) => {
           const canDelete = !!viewerId && (viewerId === c.authorId || viewerId === momentAuthorId)
+          const isPostAuthor = c.authorId === momentAuthorId
+          const authorName = c.author.profile?.username || c.author.name || "Member"
           return (
-            <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary text-xs font-bold">
-                {(c.author.profile?.username || c.author.name || "?")[0].toUpperCase()}
-              </div>
+            <div
+              key={c.id}
+              id={`comment-${c.id}`}
+              className={cn(
+                "flex gap-3 scroll-mt-20 py-3.5 first:pt-0 last:pb-0",
+                // The post author's replies get a faint wash so the
+                // conversation's spine reads at a glance.
+                isPostAuthor && "-mx-3 rounded-xl bg-primary/[0.05] px-3"
+              )}
+            >
+              <Avatar src={c.author.image} size="sm" alt={authorName} className="mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
-                    {c.author.profile?.username || c.author.name}
+                    {authorName}
                   </Link>
+                  {isPostAuthor && (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      Author
+                    </span>
+                  )}
                   <RoleBadge role={c.author.role} />
                   <span className="text-xs text-muted-foreground">
                     <TimeAgo value={c.createdAt} />

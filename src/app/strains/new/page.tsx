@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Leaf, Loader2 } from "@/lib/icons"
+import { Leaf, Loader2, ArrowLeft } from "@/lib/icons"
 import Link from "next/link"
 import { strainPath } from "@/lib/slugs"
 import {
@@ -16,6 +16,18 @@ import {
   STRAIN_DIFFICULTIES,
   STRAIN_DIFFICULTY_LABELS,
 } from "@/lib/strain-fields"
+
+// Field-group header — eyebrow label over a serif subhead, matching the
+// journal-form movements used across the redesign.
+function FieldGroupHead({ eyebrow, title, hint }: { eyebrow: string; title: string; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <span className="tt-eyebrow">{eyebrow}</span>
+      <h3 className="font-display font-semibold text-lg mt-1.5 tracking-tight">{title}</h3>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
 
 export default function NewStrainPage() {
   const { data: session, status } = useSession()
@@ -107,16 +119,24 @@ export default function NewStrainPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/strains" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
-            ← Back to Strains
+          <Link href="/strains" className="text-sm text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1">
+            <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Back to Strains
           </Link>
+          <div className="tt-eyebrow mt-3 mb-1.5">Catalog contribution</div>
           <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Add New Strain</h1>
-          <p className="text-muted-foreground">Contribute to our community strain database</p>
+          <p className="text-muted-foreground">Contribute to our community strain database — only report what you actually know.</p>
         </div>
 
         {/* Form */}
         <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* ── Identity — what the catalog entry is ─────────────── */}
+            <div className="space-y-4">
+              <FieldGroupHead
+                eyebrow="Identity"
+                title="The strain"
+                hint="Name, genetics, and breeder — the catalog's spine."
+              />
             <div>
               <label htmlFor="name" className="block text-sm font-medium mb-2">
                 Strain Name *
@@ -183,7 +203,15 @@ export default function NewStrainPage() {
                 <option value="Other">Other</option>
               </select>
             </div>
+            </div>
 
+            {/* ── Reported characteristics — controlled vocab only ── */}
+            <div className="space-y-4 border-t border-border/60 pt-6">
+              <FieldGroupHead
+                eyebrow="Reported characteristics"
+                title="What growers report"
+                hint="Optional — controlled-vocabulary values the catalog can actually filter on."
+              />
             {/* Catalog facets — optional, controlled vocab so the index
                 can filter on real values instead of free text. */}
             <div className="grid sm:grid-cols-3 gap-4">
@@ -309,7 +337,15 @@ export default function NewStrainPage() {
                 })}
               </div>
             </div>
+            </div>
 
+            {/* ── Write-up — the longer-form catalog copy ─────────── */}
+            <div className="space-y-4 border-t border-border/60 pt-6">
+              <FieldGroupHead
+                eyebrow="Write-up"
+                title="Description & growing info"
+                hint="Free text — effects, aroma, and how it grows, in your own words."
+              />
             <div>
               <label htmlFor="description" className="block text-sm font-medium mb-2">
                 Description
@@ -337,6 +373,7 @@ export default function NewStrainPage() {
                 rows={4}
               />
             </div>
+            </div>
 
             {error && (
               <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
@@ -348,7 +385,7 @@ export default function NewStrainPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 tt-cta py-3 rounded-full font-medium text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

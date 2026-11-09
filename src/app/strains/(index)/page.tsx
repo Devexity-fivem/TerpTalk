@@ -2,11 +2,12 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { unstable_cache } from "next/cache"
-import { Search, Plus, Leaf, ChevronLeft, ChevronRight, SlidersHorizontal } from "@/lib/icons"
+import { Search, Plus, Leaf, ChevronLeft, ChevronRight, SlidersHorizontal, Dna, Sprout, ImageIcon, X } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import StrainCard from "@/components/strain-card"
 import PageHeader from "@/components/ui/page-header"
+import StatStrip from "@/components/ui/stat-strip"
 import { strainTypeLabel } from "@/lib/strain-stats"
 import {
   STRAIN_TYPES,
@@ -71,6 +72,23 @@ const getStrains = unstable_cache(
   { revalidate: 300, tags: ["strains"] }
 )
 
+// Catalog-at-a-glance counts — independent of the active filters, so the
+// strip always describes the whole database. Same cache tags as the lists.
+const getCatalogStats = unstable_cache(
+  async () => {
+    const [strainCount, growCount, photoCount] = await Promise.all([
+      prisma.strain.count(),
+      // Public, non-deleted diaries by active authors only — the same
+      // honesty rule the card _count uses.
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
+      prisma.strainPhoto.count({ where: { user: activeAuthor() } }),
+    ])
+    return { strainCount, growCount, photoCount }
+  },
+  ["strain-catalog-stats"],
+  { revalidate: 300, tags: ["strains", "diaries"] }
+)
+
 // Distinct breeders for the filter dropdown — deduped case-insensitively
 // server-side, canonical spelling from the first occurrence.
 const getBreeders = unstable_cache(
@@ -111,6 +129,44 @@ function filterHref(f: StrainFilters, patch: Partial<StrainFilters>) {
 
 const activeFilterCount = (f: StrainFilters) =>
   [f.type, f.effect, f.flavor, f.difficulty, f.thc, f.flower, f.breeder].filter(Boolean).length
+
+// Removable facet chips — one per EFFECTIVE filter (the same vocab checks
+// strainWhere applies, so a junk param never renders a misleading chip).
+// Each chip's href is the current URL minus that one facet, page reset.
+function facetChips(f: StrainFilters): { key: string; label: string; href: string }[] {
+  const chips: { key: string; label: string; href: string }[] = []
+  const drop = (patch: Partial<StrainFilters>) => filterHref(f, { ...patch, page: 1 })
+  if ((STRAIN_TYPES as readonly string[]).includes(f.type)) {
+    chips.push({ key: "type", label: `Type · ${strainTypeLabel(f.type)}`, href: drop({ type: "" }) })
+  }
+  if ((STRAIN_EFFECTS as readonly string[]).includes(f.effect)) {
+    chips.push({
+      key: "effect",
+      label: `Effect · ${STRAIN_EFFECT_LABELS[f.effect as keyof typeof STRAIN_EFFECT_LABELS] ?? f.effect}`,
+      href: drop({ effect: "" }),
+    })
+  }
+  if ((STRAIN_FLAVORS as readonly string[]).includes(f.flavor)) {
+    chips.push({
+      key: "flavor",
+      label: `Flavor · ${STRAIN_FLAVOR_LABELS[f.flavor as keyof typeof STRAIN_FLAVOR_LABELS] ?? f.flavor}`,
+      href: drop({ flavor: "" }),
+    })
+  }
+  if (f.difficulty) {
+    chips.push({
+      key: "difficulty",
+      label: `Difficulty · ${STRAIN_DIFFICULTY_LABELS[f.difficulty] ?? f.difficulty}`,
+      href: drop({ difficulty: null }),
+    })
+  }
+  const thc = THC_BANDS.find((b) => b.key === f.thc)
+  if (thc) chips.push({ key: "thc", label: `THC · ${thc.label}`, href: drop({ thc: "" }) })
+  const flower = FLOWER_BANDS.find((b) => b.key === f.flower)
+  if (flower) chips.push({ key: "flower", label: `Flowering · ${flower.label}`, href: drop({ flower: "" }) })
+  if (f.breeder) chips.push({ key: "breeder", label: `Breeder · ${f.breeder}`, href: drop({ breeder: "" }) })
+  return chips
+}
 
 function FilterControls({ f, breeders }: { f: StrainFilters; breeders: string[] }) {
   const select = "px-2.5 py-2 rounded-lg border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-9"
@@ -183,11 +239,12 @@ export default async function StrainsPage({
     page: Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1,
   }
 
-  const [{ strains, total }, breeders] = await Promise.all([getStrains(f), getBreeders()])
+  const [{ strains, total }, breeders, catalog] = await Promise.all([getStrains(f), getBreeders(), getCatalogStats()])
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageHref = (p: number) => filterHref(f, { page: p })
   const nActive = activeFilterCount(f)
   const hasQuery = !!f.q || nActive > 0
+  const chips = facetChips(f)
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,6 +254,17 @@ export default async function StrainsPage({
           context={<span className="tt-eyebrow">Genetics vault</span>}
           title="Strain Database"
           description="Community-maintained database of cannabis strains, genetics, and growing characteristics"
+        />
+
+        {/* Catalog at a glance — real counts, independent of filters */}
+        <StatStrip
+          className="mb-6"
+          items={[
+            { label: "Strains", value: catalog.strainCount, icon: Leaf },
+            { label: "Breeders", value: breeders.length, icon: Dna },
+            { label: "Public grows", value: catalog.growCount, icon: Sprout, href: "/diaries" },
+            { label: "Community photos", value: catalog.photoCount, icon: ImageIcon },
+          ]}
         />
 
         {/* Search */}
@@ -274,6 +342,31 @@ export default async function StrainsPage({
             </Link>
           </div>
         </div>
+
+        {/* Active facets as removable chips — each is a real filter
+            state with a one-click way back out. */}
+        {chips.length > 0 && (
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Filtered by</span>
+            {chips.map((c) => (
+              <Link
+                key={c.key}
+                href={c.href}
+                className="group inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+              >
+                {c.label}
+                <X className="h-3 w-3 text-primary/60 transition-colors group-hover:text-primary" aria-hidden="true" />
+                <span className="sr-only">Remove {c.label} filter</span>
+              </Link>
+            ))}
+            <Link
+              href={f.q ? `/strains?q=${encodeURIComponent(f.q)}` : "/strains"}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Reset facets
+            </Link>
+          </div>
+        )}
 
         {strains.length === 0 ? (
           <div className="bg-card/80 rounded-2xl border border-border/70">
