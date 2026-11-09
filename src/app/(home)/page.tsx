@@ -373,15 +373,17 @@ export default async function Home() {
                         {thread.category.name} · {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
                       </span>
                     </span>
-                    <ProfileCard
-                      username={thread.author.profile?.username}
-                      name={thread.author.profile?.username || thread.author.name}
-                      avatarUrl={thread.author.image}
-                      xp={thread.author.profile?.xp}
-                      publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
-                      size="sm"
-                      linked={false}
-                    />
+                    <span className="hidden sm:block shrink-0">
+                      <ProfileCard
+                        username={thread.author.profile?.username}
+                        name={thread.author.profile?.username || thread.author.name}
+                        avatarUrl={thread.author.image}
+                        xp={thread.author.profile?.xp}
+                        publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      />
+                    </span>
                   </Link>
                 </li>
               ))}
@@ -400,15 +402,17 @@ export default async function Home() {
                       <span className="block font-medium text-sm truncate group-hover:text-primary transition-colors">{update.title}</span>
                       <span className="text-xs text-muted-foreground truncate">{update.diary.title}</span>
                     </span>
-                    <ProfileCard
-                      username={update.author.profile?.username}
-                      name={update.author.profile?.username || update.author.name}
-                      avatarUrl={update.author.image}
-                      xp={update.author.profile?.xp}
-                      publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
-                      size="sm"
-                      linked={false}
-                    />
+                    <span className="hidden sm:block shrink-0">
+                      <ProfileCard
+                        username={update.author.profile?.username}
+                        name={update.author.profile?.username || update.author.name}
+                        avatarUrl={update.author.image}
+                        xp={update.author.profile?.xp}
+                        publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      />
+                    </span>
                   </Link>
                 </li>
               ))}
