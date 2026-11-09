@@ -436,7 +436,12 @@ export default function ProfileCustomizePage() {
           size="md"
           title="Customize profile"
           description="Presets only — your profile stays fast, safe, and TerpTalk-coherent. Custom sections use Markdown."
-          context={<Link href={`/u/${encodeURIComponent(username)}`} className="text-primary hover:underline">← View your profile</Link>}
+          context={
+            <span className="flex items-center gap-3 flex-wrap">
+              <span className="tt-eyebrow">Profile studio</span>
+              <Link href={`/u/${encodeURIComponent(username)}`} className="text-primary hover:underline">← View your profile</Link>
+            </span>
+          }
           actions={
             <Link href="/profile" className="rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Account settings

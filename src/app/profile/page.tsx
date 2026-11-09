@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight, Pin, Eye, Palette, Target } from "@/lib/icons"
+import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight, Pin, Eye, Palette, Target, X } from "@/lib/icons"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -302,6 +302,9 @@ export default function ProfilePage() {
   const [loadError, setLoadError] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Inline modal error — save/avatar failures surface in the dialog
+  // instead of a browser alert().
+  const [editError, setEditError] = useState("")
   const [showAllBadges, setShowAllBadges] = useState(false)
   // Honor deep links (/profile#rewards, /profile#recovery, /profile#account)
   // by landing on the tab that holds that section. The hash is read through
@@ -434,27 +437,79 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
         {/* Profile Header — V2 hero: banner strip, progression identity,
             cultivation tags; same visual language as the public profile. */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
+        <div className="tt-edge-card tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           {psettings.bannerImage ? (
-            <div className="relative h-24 sm:h-32 w-full">
+            <div className="relative h-28 sm:h-36 w-full">
               <BlobImage src={psettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
               <div className="absolute inset-0 bg-linear-to-t from-card/90 to-transparent" />
             </div>
           ) : (
-            <div className="tt-spectrum-bar h-1" />
+            // No banner — the same composed botanical wash + journal grid
+            // the public profile shows, so hub and public views agree.
+            <div className="relative h-20 sm:h-28 w-full bg-linear-to-br from-primary/15 via-emerald-500/8 to-spectrum/12" aria-hidden="true">
+              <div className="tt-grid-bg absolute inset-0" />
+            </div>
           )}
-          <div className="p-4 sm:p-5">
-            <div className="flex items-start gap-4 flex-wrap">
-              <div className={cn("rounded-full shrink-0", psettings.bannerImage && "-mt-12 sm:-mt-14 ring-4 ring-card")}>
+          <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+            {/* Avatar + actions — same overlap composition as the public hero. */}
+            <div className="flex items-end justify-between gap-3">
+              <div className="rounded-full shrink-0 -mt-10 sm:-mt-12 ring-4 ring-card bg-card">
                 <Avatar
                   src={profileData.profile?.avatarUrl}
                   alt={`${profileData.profile?.username || profileData.user.name} avatar`}
                   size="xl"
-                  className="w-20 h-20 bg-primary/10 text-primary"
+                  className="w-20 h-20 sm:w-24 sm:h-24 bg-primary/10 text-primary"
                   fallback={<User className="w-10 h-10 text-primary" />}
                 />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 shrink-0 pt-3 flex-wrap justify-end">
+                {profileData.profile?.username && (
+                  <Link
+                    href={`/u/${profileData.profile.username}`}
+                    className="flex items-center gap-1.5 rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> View public
+                  </Link>
+                )}
+                <Link
+                  href="/profile/customize"
+                  className="flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Palette className="w-3.5 h-3.5" /> Customize
+                </Link>
+                <button
+                  onClick={() => {
+                    const p = profileData.profile
+                    setEditError("")
+                    setEditForm({
+                      bio: p?.bio || "",
+                      location: p?.location || "",
+                      website: p?.website || "",
+                      avatarUrl: p?.avatarUrl || "",
+                      growExperience: p?.growExperience || "",
+                      favoriteStrain: p?.favoriteStrain || "",
+                      growSpace: p?.growSpace || "",
+                      businessName: p?.businessName || "",
+                      businessType: p?.businessType || "",
+                      businessUrl: p?.businessUrl || "",
+                      notifyOnReply: p?.notifyOnReply ?? true,
+                      notifyOnMention: p?.notifyOnMention ?? true,
+                      notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
+                      notifyOnMessage: p?.notifyOnMessage ?? true,
+                      notifyOnComment: p?.notifyOnComment ?? true,
+                      notifyOnFollow: p?.notifyOnFollow ?? true,
+                      notifyOnReaction: p?.notifyOnReaction ?? true,
+                    })
+                    setEditing(true)
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3.5 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit Profile
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 min-w-0">
+                <p className="tt-eyebrow mb-1.5">Your grower hub</p>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
                     <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
@@ -517,61 +572,18 @@ export default function ProfilePage() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {profileData.profile?.username && (
-                      <Link
-                        href={`/u/${profileData.profile.username}`}
-                        className="flex items-center gap-1.5 rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View public
-                      </Link>
-                    )}
-                    <Link
-                      href="/profile/customize"
-                      className="flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <Palette className="w-3.5 h-3.5" /> Customize
-                    </Link>
-                    <button
-                      onClick={() => {
-                        const p = profileData.profile
-                        setEditForm({
-                          bio: p?.bio || "",
-                          location: p?.location || "",
-                          website: p?.website || "",
-                          avatarUrl: p?.avatarUrl || "",
-                          growExperience: p?.growExperience || "",
-                          favoriteStrain: p?.favoriteStrain || "",
-                          growSpace: p?.growSpace || "",
-                          businessName: p?.businessName || "",
-                          businessType: p?.businessType || "",
-                          businessUrl: p?.businessUrl || "",
-                          notifyOnReply: p?.notifyOnReply ?? true,
-                          notifyOnMention: p?.notifyOnMention ?? true,
-                          notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
-                          notifyOnMessage: p?.notifyOnMessage ?? true,
-                          notifyOnComment: p?.notifyOnComment ?? true,
-                          notifyOnFollow: p?.notifyOnFollow ?? true,
-                          notifyOnReaction: p?.notifyOnReaction ?? true,
-                        })
-                        setEditing(true)
-                      }}
-                      className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3.5 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> Edit Profile
-                    </button>
-                  </div>
                 </div>
-                <StatStrip
-                  className="mt-4"
-                  items={[
-                    { label: "XP", value: profileData.stats.xp.toLocaleString() },
-                    { label: "Followers", value: profileData.stats.followers },
-                    { label: "Following", value: profileData.stats.following },
-                    { label: "Diaries", value: profileData.stats.diaries },
-                  ]}
-                />
-              </div>
+                {/* Identity → record divider, same as the public hero. */}
+                <div className="mt-4 border-t border-border/50 pt-4">
+                  <StatStrip
+                    items={[
+                      { label: "XP", value: profileData.stats.xp.toLocaleString() },
+                      { label: "Followers", value: profileData.stats.followers },
+                      { label: "Following", value: profileData.stats.following },
+                      { label: "Diaries", value: profileData.stats.diaries },
+                    ]}
+                  />
+                </div>
             </div>
           </div>
         </div>
@@ -583,10 +595,28 @@ export default function ProfilePage() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="edit-profile-title"
-              className="bg-card/80 border border-border/70 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
+              className="bg-card border border-border/70 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 id="edit-profile-title" className="font-display text-lg font-semibold mb-4">Edit Profile</h2>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <p className="tt-eyebrow mb-1">Identity</p>
+                  <h2 id="edit-profile-title" className="font-display text-lg font-semibold">Edit Profile</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  aria-label="Close"
+                  className="p-1.5 rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+              {editError && (
+                <p role="alert" className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2 text-sm text-destructive">
+                  {editError}
+                </p>
+              )}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Profile Photo</label>
@@ -605,12 +635,13 @@ export default function ProfilePage() {
                         onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
-                          if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB"); return }
+                          if (file.size > 5 * 1024 * 1024) { setEditError("Image must be under 5MB"); return }
                           try {
                             const dataUri = await resizeImage(file)
+                            setEditError("")
                             setEditForm({ ...editForm, avatarUrl: dataUri })
                           } catch {
-                            alert("Could not process that image")
+                            setEditError("Could not process that image")
                           }
                         }}
                         className="text-sm text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-full file:border-0 file:bg-primary file:text-primary-foreground file:text-xs file:font-medium hover:file:bg-primary/90"
@@ -697,8 +728,8 @@ export default function ProfilePage() {
                     />
                   </div>
                   <div className="sm:col-span-2 border-t border-border pt-4 mt-2">
-                    <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <Store className="w-4 h-4 text-primary" /> Business / Breeder Profile
+                    <h3 className="tt-eyebrow mb-3">
+                      Business / breeder profile <span className="normal-case font-normal text-muted-foreground tracking-normal">— optional</span>
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
@@ -741,7 +772,7 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="sm:col-span-2 border-t border-border pt-4 mt-2">
-                    <h3 className="text-sm font-medium mb-3">Notifications</h3>
+                    <h3 className="tt-eyebrow mb-3">Notifications</h3>
                     <div className="space-y-3">
                       <label className="flex items-center gap-2 text-sm">
                         <input
@@ -826,12 +857,13 @@ export default function ProfilePage() {
                           const d = await res.json()
                           setProfileData(prev => prev ? { ...prev, profile: d.profile } : prev)
                           setEditing(false)
+                          toast("Profile updated")
                         } else {
-                          const d = await res.json()
-                          alert(d.error || "Failed to save")
+                          const d = await res.json().catch(() => null)
+                          setEditError(d?.error || "Failed to save")
                         }
                       } catch {
-                        alert("Network error — check your connection and try again")
+                        setEditError("Network error — check your connection and try again")
                       } finally {
                         setSaving(false)
                       }

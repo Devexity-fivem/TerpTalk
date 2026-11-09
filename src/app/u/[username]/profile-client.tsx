@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { User, UserPlus, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal, Video } from "@/lib/icons"
 import Link from "next/link"
 import { signInHref } from "@/lib/callback-url"
@@ -469,6 +469,12 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [tab, setTab] = useState("overview")
+  // ?tab= deep links: Tabs mounts its sync effect before the router
+  // finishes populating search params on hydration, so the parent never
+  // hears the initial tab and lazy sections would never fetch. Read the
+  // live param each render — it self-corrects as soon as params land.
+  const urlTab = useSearchParams().get("tab")
+  const activeTab = urlTab ?? tab
   // P3 — deterministic portfolio filters (server-validated columns only)
   // + strain see-all + follow-list dialog state.
   const [growStatus, setGrowStatus] = useState<"" | "active" | "completed">("")
@@ -501,11 +507,11 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
     harvestStrain ? `strain=${encodeURIComponent(harvestStrain)}` : "",
     harvestYear ? `year=${encodeURIComponent(harvestYear)}` : "",
   ].filter(Boolean).join("&")
-  const activitySection = useProfileSection<FeedItem>(username, "activity", tab === "activity")
-  const postsSection = useProfileSection<FeedItem>(username, "posts", tab === "posts")
-  const mediaSection = useProfileSection<MediaTileDTO>(username, "media", tab === "media")
-  const growsSection = useProfileSection<GrowCard>(username, "grows", tab === "grows", growsQuery)
-  const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", tab === "harvests", harvestsQuery)
+  const activitySection = useProfileSection<FeedItem>(username, "activity", activeTab === "activity")
+  const postsSection = useProfileSection<FeedItem>(username, "posts", activeTab === "posts")
+  const mediaSection = useProfileSection<MediaTileDTO>(username, "media", activeTab === "media")
+  const growsSection = useProfileSection<GrowCard>(username, "grows", activeTab === "grows", growsQuery)
+  const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", activeTab === "harvests", harvestsQuery)
   const strainsSection = useProfileSection<StrainRow>(username, "strains", showAllStrains)
   const followSection = useProfileSection<FollowRow>(username, followList ?? "followers", !!followList)
 
@@ -742,8 +748,11 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
             </div>
           ) : (
             // Members without a banner still get a composed profile band —
-            // a soft botanical wash, never a bare strip.
-            <div className="h-20 sm:h-28 w-full bg-linear-to-br from-primary/15 via-emerald-500/8 to-spectrum/12" aria-hidden="true" />
+            // a soft botanical wash over a faint journal grid, never a
+            // bare strip.
+            <div className="relative h-20 sm:h-28 w-full bg-linear-to-br from-primary/15 via-emerald-500/8 to-spectrum/12" aria-hidden="true">
+              <div className="tt-grid-bg absolute inset-0" />
+            </div>
           )}
           <div className="px-4 sm:px-5 pb-4 sm:pb-5">
             {/* Avatar + actions — social header row. The avatar always
@@ -781,6 +790,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               </div>
             </div>
             <div className="mt-3 min-w-0">
+                <p className="tt-eyebrow mb-1.5">{isSelf ? "Your grower profile" : "Grower profile"}</p>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
                     <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
@@ -895,12 +905,14 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                   </div>
                 </div>
 
-                {/* Notable stats — ≤4 in the hero, deterministic + scoped */}
+                {/* Notable stats — ≤4 in the hero, deterministic + scoped.
+                    A hairline separates identity from the member's record. */}
                 {heroStats.length > 0 && (
-                  <StatStrip
-                    className="mt-4"
-                    items={heroStats.map((s) => ({ label: s.label, value: s.value, hint: s.hint }))}
-                  />
+                  <div className="mt-4 border-t border-border/50 pt-4">
+                    <StatStrip
+                      items={heroStats.map((s) => ({ label: s.label, value: s.value, hint: s.hint }))}
+                    />
+                  </div>
                 )}
 
                 {/* Hero grow — member's featured pick, else the live grow */}
@@ -967,7 +979,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       ))}
                     </ul>
                   )}
-                  <LoadMore loading={postsSection.loading} done={!postsSection.hasMore && postsSection.items.length > 0} onMore={postsSection.loadMore} />
+                  <LoadMore loading={postsSection.loading} done={!postsSection.hasMore && (postsSection.items.length > 0 || !postsSection.loading)} onMore={postsSection.loadMore} />
                 </SectionCard>
               )}
 
@@ -995,7 +1007,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       ))}
                     </ul>
                   )}
-                  <LoadMore loading={mediaSection.loading} done={!mediaSection.hasMore && mediaSection.items.length > 0} onMore={mediaSection.loadMore} />
+                  <LoadMore loading={mediaSection.loading} done={!mediaSection.hasMore && (mediaSection.items.length > 0 || !mediaSection.loading)} onMore={mediaSection.loadMore} />
                 </SectionCard>
               )}
 
@@ -1029,7 +1041,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       ))}
                     </ul>
                   )}
-                  <LoadMore loading={activitySection.loading} done={!activitySection.hasMore && activitySection.items.length > 0} onMore={activitySection.loadMore} />
+                  <LoadMore loading={activitySection.loading} done={!activitySection.hasMore && (activitySection.items.length > 0 || !activitySection.loading)} onMore={activitySection.loadMore} />
                 </SectionCard>
               )}
 
@@ -1071,7 +1083,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                           {strainsSection.loading && <li className="text-xs text-muted-foreground">Loading…</li>}
                         </ul>
                       )}
-                      {showAllStrains && <LoadMore loading={strainsSection.loading} done={!strainsSection.hasMore && strainsSection.items.length > 0} onMore={strainsSection.loadMore} />}
+                      {showAllStrains && <LoadMore loading={strainsSection.loading} done={!strainsSection.hasMore && (strainsSection.items.length > 0 || !strainsSection.loading)} onMore={strainsSection.loadMore} />}
                     </SectionCard>
                   )}
                   <SectionCard spotlight title="Grow portfolio" id="grow-portfolio" compact={compact} description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
@@ -1113,7 +1125,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                         ))}
                       </ul>
                     )}
-                    <LoadMore loading={growsSection.loading} done={!growsSection.hasMore && growsSection.items.length > 0} onMore={growsSection.loadMore} />
+                    <LoadMore loading={growsSection.loading} done={!growsSection.hasMore && (growsSection.items.length > 0 || !growsSection.loading)} onMore={growsSection.loadMore} />
                   </SectionCard>
                 </div>
               )}
@@ -1229,7 +1241,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                         })}
                       </ul>
                     )}
-                    <LoadMore loading={harvestsSection.loading} done={!harvestsSection.hasMore && harvestsSection.items.length > 0} onMore={harvestsSection.loadMore} />
+                    <LoadMore loading={harvestsSection.loading} done={!harvestsSection.hasMore && (harvestsSection.items.length > 0 || !harvestsSection.loading)} onMore={harvestsSection.loadMore} />
                   </SectionCard>
                 </div>
               )}
@@ -1308,7 +1320,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                 </ul>
               )}
               {followSection.loading && <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>}
-              <div className="pb-2"><LoadMore loading={followSection.loading} done={!followSection.hasMore && followSection.items.length > 0} onMore={followSection.loadMore} /></div>
+              <div className="pb-2"><LoadMore loading={followSection.loading} done={!followSection.hasMore && (followSection.items.length > 0 || !followSection.loading)} onMore={followSection.loadMore} /></div>
             </div>
           </div>
         </div>
