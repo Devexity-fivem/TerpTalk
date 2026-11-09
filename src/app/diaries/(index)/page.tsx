@@ -356,7 +356,9 @@ export default async function DiariesPage({
           description="Document and share your complete grow journey from seed to harvest"
         />
 
-        {/* Community grow data — aggregate-only stats, descriptive wording */}
+        {/* Community grow data — aggregate-only stats, descriptive wording.
+            Collapsed by default when populated: reference data, not the
+            page's reason to exist. The summary line stays visible. */}
         <SectionCard spotlight
           className="mb-6 tt-edge-card"
           title={
@@ -377,6 +379,11 @@ export default async function DiariesPage({
               Not enough community data yet — stats appear as members log grow diaries.
             </p>
           ) : (
+          <details className="group/stats">
+            <summary className="cursor-pointer list-none text-sm text-primary font-medium select-none flex items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/stats:rotate-90" />
+              Community methods, harvests, and yields
+            </summary>
             <div className="space-y-4 text-sm">
               {/* Commonly used methods — counts + shares, no rankings */}
               <div className="space-y-1.5">
@@ -430,6 +437,7 @@ export default async function DiariesPage({
                   )}
               </div>
             </div>
+          </details>
           )}
         </SectionCard>
 
