@@ -19,6 +19,7 @@ import { LiveRefresh } from "@/components/live-refresh"
 import PageHeader from "@/components/ui/page-header"
 import SectionCard from "@/components/ui/section-card"
 import { buildMetadata } from "@/lib/seo"
+import type { ReactNode } from "react"
 
 // Dynamic — the grid must stay fresh for LiveRefresh's router.refresh()
 // (ISR would serve the stale shell even after a fingerprint change). The
@@ -34,9 +35,23 @@ export const metadata = buildMetadata({
 const PAGE_SIZE = 24
 const MAX_PAGE = 50
 
+// Journal-wall filters — server-side, param-driven so every filtered view
+// is a stable URL. Values validated against known enums before hitting Prisma.
+type DiaryFilters = { stage?: string; growType?: string; harvested?: boolean }
+const VALID_GROW_TYPES = new Set(["INDOOR", "OUTDOOR", "GREENHOUSE"])
+const VALID_STAGES = new Set(Object.keys(STAGE_LABELS))
+
+function filterWhere(f: DiaryFilters) {
+  return {
+    ...(f.stage ? { stage: f.stage } : {}),
+    ...(f.growType ? { growType: f.growType } : {}),
+    ...(f.harvested ? { harvested: true } : {}),
+  }
+}
+
 const getDiaries = unstable_cache(
-  async (page: number) => {
-    const where = { deleted: false, author: activeAuthor(), ...publicDiaryWhere }
+  async (page: number, filters: DiaryFilters) => {
+    const where = { deleted: false, author: activeAuthor(), ...publicDiaryWhere, ...filterWhere(filters) }
     // The rail owns featured diaries — the grid excludes them so page 1
     // never shows the same diary twice, and counts stay consistent.
     const gridWhere = { ...where, featured: false }
@@ -133,6 +148,65 @@ function DistLine({ label, dist }: { label: string; dist: Distribution }) {
 }
 
 type DiaryCardData = Awaited<ReturnType<typeof getDiaries>>["diaries"][number]
+
+// Journal-wall filter pills — plain links (server-rendered, no client
+// state). Each pill toggles one param and resets pagination to page 1.
+function filterHref(filters: DiaryFilters, patch: DiaryFilters): string {
+  const next = { ...filters, ...patch }
+  const params = new URLSearchParams()
+  if (next.stage) params.set("stage", next.stage)
+  if (next.growType) params.set("growType", next.growType)
+  if (next.harvested) params.set("harvested", "1")
+  const qs = params.toString()
+  return qs ? `/diaries?${qs}` : "/diaries"
+}
+
+function FilterPill({ href, active, children }: { href: string; active: boolean; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "true" : undefined}
+      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+        active
+          ? "bg-primary text-primary-foreground"
+          : "bg-card border border-border/70 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+      }`}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function DiaryFilterBar({ filters }: { filters: DiaryFilters }) {
+  return (
+    <div className="mb-5 space-y-2">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" role="group" aria-label="Filter by grow stage">
+        <FilterPill href={filterHref(filters, { stage: undefined })} active={!filters.stage}>
+          All stages
+        </FilterPill>
+        {Object.entries(STAGE_LABELS).map(([value, label]) => (
+          <FilterPill key={value} href={filterHref(filters, { stage: filters.stage === value ? undefined : value })} active={filters.stage === value}>
+            {label}
+          </FilterPill>
+        ))}
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" role="group" aria-label="Filter by grow type">
+        <FilterPill href={filterHref(filters, { growType: undefined })} active={!filters.growType}>
+          Any environment
+        </FilterPill>
+        {["INDOOR", "OUTDOOR", "GREENHOUSE"].map((gt) => (
+          <FilterPill key={gt} href={filterHref(filters, { growType: filters.growType === gt ? undefined : gt })} active={filters.growType === gt}>
+            {gt.charAt(0) + gt.slice(1).toLowerCase()}
+          </FilterPill>
+        ))}
+        <span className="shrink-0 self-center mx-1 h-4 w-px bg-border" aria-hidden="true" />
+        <FilterPill href={filterHref(filters, { harvested: filters.harvested ? undefined : true })} active={!!filters.harvested}>
+          Harvested
+        </FilterPill>
+      </div>
+    </div>
+  )
+}
 
 // Lifecycle order lives in lib/diary-weeks; StageProgress renders the
 // segmented track (current = violet, done = emerald).
@@ -241,14 +315,20 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
 export default async function DiariesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; stage?: string; growType?: string; harvested?: string }>
 }) {
   const sp = await searchParams
   const rawPage = Number.parseInt(sp?.page ?? "1", 10)
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
+  const filters: DiaryFilters = {
+    stage: sp?.stage && VALID_STAGES.has(sp.stage) ? sp.stage : undefined,
+    growType: sp?.growType && VALID_GROW_TYPES.has(sp.growType) ? sp.growType : undefined,
+    harvested: sp?.harvested === "1" || undefined,
+  }
+  const filtered = !!(filters.stage || filters.growType || filters.harvested)
 
   const [cached, stats, session] = await Promise.all([
-    getDiaries(page),
+    getDiaries(page, filters),
     getCommunityGrowStats(),
     getSession(),
   ])
@@ -260,7 +340,10 @@ export default async function DiariesPage({
   const diaries = cached.diaries.filter((d) => notBlocked(d.authorId))
   const featured = cached.featured.filter((d) => notBlocked(d.authorId))
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const pageHref = (p: number) => (p <= 1 ? "/diaries" : `/diaries?page=${p}`)
+  const pageHref = (p: number) => {
+    const base = filterHref(filters, {})
+    return p <= 1 ? base : `${base}${base.includes("?") ? "&" : "?"}page=${p}`
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -370,7 +453,10 @@ export default async function DiariesPage({
           <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
             <div>
               <span className="tt-eyebrow">The journal wall</span>
-              <h2 className="font-display text-xl font-semibold mt-1">All Diaries</h2>
+              <h2 className="font-display text-xl font-semibold mt-1">
+                All Diaries
+                {filtered && <span className="ml-2 text-sm font-normal text-muted-foreground">— {total} match{total === 1 ? "" : "es"}</span>}
+              </h2>
             </div>
             <Link
               href="/diaries/new"
@@ -380,13 +466,15 @@ export default async function DiariesPage({
             </Link>
           </div>
 
+          <DiaryFilterBar filters={filters} />
+
           {diaries.length === 0 ? (
             <div className="bg-card/80 rounded-2xl border border-border/70">
               <EmptyState
                 icon={Leaf}
-                title={total === 0 ? "No grow diaries yet" : "No diaries on this page"}
-                description={total === 0 ? "Be the first to document your grow journey." : "This page is past the end of the diary list."}
-                action={total === 0 ? { label: "Start your first diary", href: "/diaries/new" } : { label: "Back to page 1", href: "/diaries" }}
+                title={filtered ? "No diaries match these filters" : total === 0 ? "No grow diaries yet" : "No diaries on this page"}
+                description={filtered ? "Try widening the stage or environment filters." : total === 0 ? "Be the first to document your grow journey." : "This page is past the end of the diary list."}
+                action={filtered ? { label: "Clear filters", href: "/diaries" } : total === 0 ? { label: "Start your first diary", href: "/diaries/new" } : { label: "Back to page 1", href: "/diaries" }}
               />
             </div>
           ) : (
