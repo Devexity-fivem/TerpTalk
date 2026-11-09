@@ -114,7 +114,7 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/notifications` | IMPLEMENTED | Already app-composed (groups, unread states, actions) — inherits tokens; browser check pending |
 | `/chat`, `/messages` | NOT STARTED | `/chat` is a 28-line wrapper; surfaces = ChatPanel/ChatDock (unchanged) |
 | `/forum`, thread, category, `/questions`, `/tags` | NOT STARTED | Inherit tokens/serif headers |
-| `/setups`, `[id]`, new, edit | NOT STARTED | Needs public fixture for detail shots |
+| `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
 | `/strains`, `[slug]`, breeder, new | NOT STARTED | Detail already well-composed |
 | `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | NOT STARTED | Profile V2 w/ presets exists |
 | `/m/[id]`, `/stories/[username]` | IN PROGRESS | Byline fix `4d891b5`; composition TBD |
@@ -126,6 +126,7 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | NOT STARTED | Access rules are server-side; UI pass only |
 
 ## 6. Exact next continuation point
+0. **Gate blocker (2026-11-09):** the full `test:master` run failed 2 suites, both on time limits. `product-events`: the dev server wedged after a concurrent `npm run build`; standalone re-run on a fresh server PASS (100.4s). `diary`: 290/290 assertions PASS standalone, but it takes 804s against the 480s cap, with DB round-trip measured at ~200ms/query from this machine. The redesign diff touches no API/lib code. Re-run the full gate when DB latency is normal; do not raise the timeout. Never run `npm run build` against the dev server while tests run.
 1. Milestone A remainder: seed a few public diary fixtures (dev DB `ovztvfbvylcdpsuchvps`, unique `__redesign_*` names, clean up after) → screenshot `/diaries` populated + `/diaries/[id]` → polish detail header if needed → diary-form sections pass (`diary-form.tsx`, shared new/edit).
 2. Milestone B: `/m/[id]` composition (context rail or intentional single column — decide in browser), `/stories/[username]`, `/strains` browse polish, `/u/[username]` + `/growers` sections.
 3. Milestone C: chat surface (conversation list/item, message groups, mobile sheet, `/chat` 28-line wrapper), `/messages`, `/notifications` browser verify.
