@@ -31,10 +31,11 @@ export default async function EditGuidePage({ params }: { params: Promise<{ slug
 
   if (!canEdit) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md tt-spotlight bg-card/80 rounded-2xl border border-border/70 text-center px-6 py-10">
           <h1 className="font-display text-xl font-bold mb-2">Permission denied</h1>
-          <p className="text-muted-foreground">Only the guide author or a moderator can edit this guide.</p>
+          <p className="text-sm text-muted-foreground mb-5">Only the guide author or a moderator can edit this guide.</p>
+          <a href={`/guides/${slug}`} className="text-sm text-primary hover:underline">Back to guide</a>
         </div>
       </div>
     )

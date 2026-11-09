@@ -18,16 +18,19 @@ interface TierChipProps {
   // sm = inline with usernames (posts/chat/lists); md = profile cards
   size?: "sm" | "md"
   className?: string
+  // Tooltip bubble anchor — "end" keeps right-edge placements from pushing
+  // the bubble past the viewport. Defaults to the Tooltip's "center".
+  tooltipAlign?: "center" | "start" | "end"
 }
 
-export default function TierChip({ xp, publicMilestoneOptOut, size = "sm", className }: TierChipProps) {
+export default function TierChip({ xp, publicMilestoneOptOut, size = "sm", className, tooltipAlign }: TierChipProps) {
   // Rollout flag — display only, no progression data at stake. Set
   // NEXT_PUBLIC_VISIBLE_STATUS=false + redeploy to hide all rank chips.
   if (process.env.NEXT_PUBLIC_VISIBLE_STATUS === "false") return null
   if (publicMilestoneOptOut) return null
   const rank = rankDisplay(xp)
   return (
-    <Tooltip content={`${rank.name} rank — earned through community contributions`}>
+    <Tooltip content={`${rank.name} rank — earned through community contributions`} align={tooltipAlign}>
       <span
         role="img"
         aria-label={`${rank.name} rank`}

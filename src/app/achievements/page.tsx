@@ -127,6 +127,7 @@ export default function AchievementsPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <PageHeader
           size="md"
+          context={<span className="tt-eyebrow">Member</span>}
           title={
             <span className="flex items-center gap-2">
               <Award className="w-6 h-6 text-primary" /> Achievements
@@ -183,7 +184,7 @@ export default function AchievementsPage() {
                   )}
                 >
                   {a.hidden && !a.earned ? (
-                    <Tooltip content="Hidden achievement — keep participating to reveal it" className="flex-1 min-w-0">
+                    <Tooltip content="Hidden achievement — keep participating to reveal it" align="end" className="flex-1 min-w-0">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-muted-foreground text-sm font-bold" aria-hidden="true">
@@ -230,7 +231,7 @@ export default function AchievementsPage() {
                   </div>
                   )}
                   {a.earned && (
-                    <Tooltip content={a.pinned ? "Remove from profile showcase" : "Pin to profile showcase"}>
+                    <Tooltip content={a.pinned ? "Remove from profile showcase" : "Pin to profile showcase"} align="end">
                       <button
                         onClick={() => togglePin(a)}
                         disabled={pinBusy === a.name}

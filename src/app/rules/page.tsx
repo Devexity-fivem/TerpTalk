@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ScrollText } from "@/lib/icons"
+import PageHeader from "@/components/ui/page-header"
 import { buildMetadata } from "@/lib/seo"
 
 export const metadata = buildMetadata({
@@ -12,15 +13,23 @@ export default function RulesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <div className="flex items-center gap-3 mb-2">
-          <ScrollText className="w-7 h-7 text-primary" />
-          <h1 className="font-display text-3xl font-bold tracking-tight">Community Rules</h1>
-        </div>
-        <p className="text-sm text-muted-foreground mb-8">
-          The short, plain-language version of how we keep TerpTalk safe. The{" "}
-          <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
-          is the legal document — this page is the everyday version.
-        </p>
+        <PageHeader
+          size="md"
+          context={<span className="tt-eyebrow">The commons</span>}
+          title={
+            <span className="flex items-center gap-2">
+              <ScrollText className="w-6 h-6 text-primary" /> Community Rules
+            </span>
+          }
+          description={
+            <>
+              The short, plain-language version of how we keep TerpTalk safe. The{" "}
+              <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
+              is the legal document — this page is the everyday version.
+            </>
+          }
+          className="mb-8"
+        />
 
         <div className="space-y-6 text-sm text-muted-foreground leading-relaxed wrap-break-word">
           <section>

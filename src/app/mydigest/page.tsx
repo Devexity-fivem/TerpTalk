@@ -27,9 +27,11 @@ export default async function MyDigestPage() {
   const d = await weeklyDigestForUser(session.user.id)
 
   return (
+    <div className="min-h-screen bg-background">
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-4">
       <EventBeacon type="DIGEST_VIEWED" />
       <PageHeader
+        context={<span className="tt-eyebrow">Weekly digest</span>}
         title="Your TerpTalk week"
         description={`Week ${d.weekKey} — what happened in your TerpTalk world since last week.`}
       />
@@ -203,6 +205,7 @@ export default async function MyDigestPage() {
           </Link>
         </Surface>
       )}
+    </div>
     </div>
   )
 }

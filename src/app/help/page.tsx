@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { HelpCircle, Stethoscope } from "@/lib/icons"
+import PageHeader from "@/components/ui/page-header"
 import { buildMetadata } from "@/lib/seo"
 
 export const metadata = buildMetadata({
@@ -218,15 +219,23 @@ export default function HelpPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-10">
-        <div className="flex items-center gap-3 mb-2">
-          <HelpCircle className="w-7 h-7 text-primary" />
-          <h1 className="font-display text-3xl font-bold tracking-tight">Help Center</h1>
-        </div>
-        <p className="text-muted-foreground mb-8">
-          How TerpTalk works — accounts, posting, diaries, chat, progression, privacy, and moderation.
-          New here? Start with <Link href="/about" className="text-primary hover:underline">About</Link> and the{" "}
-          <Link href="/rules" className="text-primary hover:underline">Community Rules</Link>.
-        </p>
+        <PageHeader
+          size="md"
+          context={<span className="tt-eyebrow">Support</span>}
+          title={
+            <span className="flex items-center gap-2">
+              <HelpCircle className="w-6 h-6 text-primary" /> Help Center
+            </span>
+          }
+          description={
+            <>
+              How TerpTalk works — accounts, posting, diaries, chat, progression, privacy, and moderation.
+              New here? Start with <Link href="/about" className="text-primary hover:underline">About</Link> and the{" "}
+              <Link href="/rules" className="text-primary hover:underline">Community Rules</Link>.
+            </>
+          }
+          className="mb-8"
+        />
 
         <Link
           href="/plant-doctor"

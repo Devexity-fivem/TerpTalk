@@ -1,5 +1,7 @@
 import ProblemWizard from "@/components/problem-wizard"
 import PlantDoctorCases from "@/components/plant-doctor-cases"
+import PageHeader from "@/components/ui/page-header"
+import SectionCard from "@/components/ui/section-card"
 import { Stethoscope, MessageSquare, HelpCircle, Sprout } from "@/lib/icons"
 import Link from "next/link"
 import { getSymptomStats } from "@/lib/community-stats"
@@ -37,14 +39,21 @@ export default async function PlantDoctorPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="mb-8 text-center">
-          <Stethoscope className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">What&apos;s wrong with my plant?</h1>
-          <p className="text-muted-foreground">
-            Answer a few questions and we&apos;ll point you at the most likely cause — and how to fix it.
-            Looking for site help instead? Visit the <Link href="/help" className="text-primary hover:underline">Help Center</Link>.
-          </p>
-        </div>
+        <PageHeader
+          size="md"
+          context={<span className="tt-eyebrow">Plant care</span>}
+          title={
+            <span className="flex items-center gap-2">
+              <Stethoscope className="w-6 h-6 text-primary" /> What&apos;s wrong with my plant?
+            </span>
+          }
+          description={
+            <>
+              Answer a few questions and we&apos;ll point you at the most likely cause — and how to fix it.
+              Looking for site help instead? Visit the <Link href="/help" className="text-primary hover:underline">Help Center</Link>.
+            </>
+          }
+        />
         <ProblemWizard loggedIn={!!userId} diaries={diaries} />
 
         {/* Outcome loop — the member's private tracked cases. Reporting
@@ -71,11 +80,9 @@ export default async function PlantDoctorPage() {
         </div>
 
         {/* Community outcomes — aggregate-only stats from Plant Doctor threads */}
-        <div className="mt-8 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            <h2 className="font-display font-semibold text-sm">Community outcomes</h2>
-          </div>
+        <SectionCard spotlight compact className="mt-8"
+          title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Community outcomes</span>}
+        >
           {stats.threadCount === 0 ? (
             <p className="text-xs text-muted-foreground">
               Not enough community data yet — outcomes appear once members post Plant Doctor threads.
@@ -102,7 +109,7 @@ export default async function PlantDoctorPage() {
               )}
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
     </div>
   )
