@@ -204,8 +204,9 @@ export default function SignUpPage() {
               <CannabisLeaf className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Join TerpTalk</h1>
-          <p className="text-muted-foreground mt-2">Create your account — 21+ only</p>
+          <span className="tt-eyebrow">21+ growers' commons</span>
+          <h1 className="font-display text-3xl font-bold tracking-tight mt-2">Join TerpTalk</h1>
+          <p className="text-muted-foreground mt-2">Create your account — document your grow, learn from real growers.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="tt-glass rounded-2xl border border-border/70 p-6 space-y-4">
