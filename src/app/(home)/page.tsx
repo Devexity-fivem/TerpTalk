@@ -355,118 +355,80 @@ export default async function Home() {
             </Link>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Categories */}
+          {/* Compact editorial activity preview — one unified strip, not a
+              second /feed. Homepage orients; the feed carries the full
+              surface. Hairline rows, small type tags, no nested cards. */}
+          <div className="grid lg:grid-cols-[1fr_260px] gap-8 items-start">
+            <ul className="divide-y divide-border/60 border-y border-border/60">
+              {latest.slice(0, 3).map((thread) => (
+                <li key={thread.id}>
+                  <Link
+                    href={`/forum/thread/${thread.slug}`}
+                    className="group flex items-center gap-3 py-3 hover:bg-secondary/40 -mx-3 px-3 rounded-lg transition-colors"
+                  >
+                    <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-primary">Discussion</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-sm truncate group-hover:text-primary transition-colors">{thread.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {thread.category.name} · {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
+                      </span>
+                    </span>
+                    <ProfileCard
+                      username={thread.author.profile?.username}
+                      name={thread.author.profile?.username || thread.author.name}
+                      avatarUrl={thread.author.image}
+                      xp={thread.author.profile?.xp}
+                      publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                      size="sm"
+                      linked={false}
+                    />
+                  </Link>
+                </li>
+              ))}
+              {diaryUpdates.slice(0, 3).map((update) => (
+                <li key={update.id}>
+                  <Link
+                    href={diaryPath(update.diary)}
+                    className="group flex items-center gap-3 py-3 hover:bg-secondary/40 -mx-3 px-3 rounded-lg transition-colors"
+                  >
+                    <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-success">Grow log</span>
+                    {update.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={update.images[0].url} alt="" className="h-10 w-14 rounded-md object-cover shrink-0" />
+                    ) : null}
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-sm truncate group-hover:text-primary transition-colors">{update.title}</span>
+                      <span className="text-xs text-muted-foreground truncate">{update.diary.title}</span>
+                    </span>
+                    <ProfileCard
+                      username={update.author.profile?.username}
+                      name={update.author.profile?.username || update.author.name}
+                      avatarUrl={update.author.image}
+                      xp={update.author.profile?.xp}
+                      publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                      size="sm"
+                      linked={false}
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {/* Topics — a quiet index, not a second nav map */}
             <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-primary" />
-                Explore Topics
-              </h3>
-              <div className="space-y-2">
-                {categories.slice(0, 5).map((cat) => (
+              <span className="tt-eyebrow">Topics</span>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {categories.slice(0, 8).map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/forum/category/${cat.slug}`}
-                    className="flex items-center justify-between p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
+                    className="rounded-full bg-card border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
                   >
-                    <div>
-                      <div className="font-medium text-sm">{cat.name}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-1">{cat.description}</div>
-                    </div>
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {cat._count.threads}
-                    </div>
+                    {cat.name} <span className="text-muted-foreground/70">{cat._count.threads}</span>
                   </Link>
                 ))}
-                {categories.length > 5 && (
-                  <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                    All categories <ArrowRight className="w-3 h-3" />
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            {/* Latest discussions */}
-            <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary" />
-                Latest Discussions
-              </h3>
-              <div className="space-y-2">
-                {latest.slice(0, 3).map((thread) => (
-                  <Link
-                    key={thread.id}
-                    href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
-                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                        <span className="text-primary">{thread.category.name}</span>
-                        <ProfileCard
-                          username={thread.author.profile?.username}
-                          name={thread.author.profile?.username || thread.author.name}
-                          avatarUrl={thread.author.image}
-                          xp={thread.author.profile?.xp}
-                          publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
-                          size="sm"
-                          linked={false}
-                        />
-                        <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                  View all discussions <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Fresh grow updates */}
-            <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <Leaf className="w-4 h-4 text-primary" />
-                Fresh Grow Updates
-              </h3>
-              <div className="space-y-2">
-                {diaryUpdates.slice(0, 4).map((update) => (
-                  <Link
-                    key={update.id}
-                    href={diaryPath(update.diary)}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
-                  >
-                    {update.images[0]?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={update.images[0].url}
-                        alt={update.title}
-                        className="w-20 h-14 rounded-lg object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-20 h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Leaf className="w-4 h-4 text-primary" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
-                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                        <span className="text-success">{update.diary.title}</span>
-                        <ProfileCard
-                          username={update.author.profile?.username}
-                          name={update.author.profile?.username || update.author.name}
-                          avatarUrl={update.author.image}
-                          xp={update.author.profile?.xp}
-                          publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
-                          size="sm"
-                          linked={false}
-                        />
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <Link href="/diaries" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                  View all diaries <ArrowRight className="w-3 h-3" />
+                <Link href="/forum" className="rounded-full px-3 py-1.5 text-xs font-medium text-primary hover:underline">
+                  All topics →
                 </Link>
               </div>
             </div>
