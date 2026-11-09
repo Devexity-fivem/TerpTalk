@@ -75,14 +75,22 @@ The app already has a real design foundation ("Verdant Ember" rebrand):
 | 2 | Foundation: palette/typography/density tokens, font swap | ✅ `b1b6ada` |
 | 3 | Shell: chat-first rail, consolidated mobile dock | ✅ `505d912` (top-bar drawer + ChatDock unchanged, still coherent) |
 | 4 | Home + Stream density | ✅ partial `505d912` — feed rows + landing rhythm tightened; landing stream still a 3-col teaser (structure TBD) |
-| 5 | Forums + thread detail | ⬜ |
-| 6 | Diaries, setups, strains | ⬜ |
-| 7 | Profiles + moments | ⬜ |
-| 8 | Chat surface, messages, notifications | ⬜ |
-| 9 | Progression, guides, plant-doctor, help, contest, settings, auth | ⬜ |
-| 10 | Admin/mod consistency pass | ⬜ |
-| 11 | Responsive + a11y sweep at 5 viewports | ⬜ |
-| 12 | Verification gate + final report | ⬜ |
+| 5 | Forums + thread detail | ⬜ inherits new tokens/serif headers only |
+| 6 | Diaries, setups, strains | ⬜ inherits tokens only |
+| 7 | Profiles + moments | 🔸 byline wrap fix `4d891b5`; layouts unchanged |
+| 8 | Chat surface, messages, notifications | 🔸 discoverability fixed via nav; surfaces unchanged |
+| 9 | Progression, guides, plant-doctor, help, contest, settings, auth | ⬜ inherits tokens only |
+| 10 | Admin/mod consistency pass | ⬜ inherits tokens only |
+| 11 | Responsive + a11y sweep at 5 viewports | 🔸 1440/390 verified via screenshots; 3 sizes pending |
+| 12 | Verification gate + final report | 🔸 tsc/lint/test:fast(5/5)/build all PASS on `4d891b5` |
+
+### Gates run so far (on `4d891b5`)
+- `npx tsc --noEmit` — exit 0
+- `npm run lint` — exit 0
+- `npm run test:fast` — 5/5 PASS
+- `npm run build` — exit 0, all 157 routes compile
+- Browser: desktop+mobile screenshots of ~30 routes (dev DB is sparse — mostly empty states)
+- Not yet run: `test:master` (full 33-suite gate ~90min) — required before merge review
 
 ## 4. Known issues / risks
 - Dev DB is nearly empty (test fixtures only) — rich states need seeded fixtures or honest empty-state review.
