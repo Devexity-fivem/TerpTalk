@@ -107,18 +107,18 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | Route | Status | Notes / evidence |
 |---|---|---|
 | `/` (landing + member home) | BROWSER VERIFIED | Rhythm `505d912`; Stream → unified editorial strip `1422e65` + mobile clip fix `fc3c773`; shots `p2-d/m-stream` |
-| `/feed` | IMPLEMENTED | Card density `505d912`; byline wrap `4d891b5`; shots p2/v2 feed |
+| `/feed` | BROWSER VERIFIED | Density `505d912`; verified `p4-d/m-feed` post-redesign |
 | `/diaries` | BROWSER VERIFIED | Filters + collapse `162f764`,`6b5c65a`; shots `p2-d/m-diaries*`; populated-card review pending seeded data |
-| `/diaries/[id]` | IMPLEMENTED | Eyebrow + stage chip + balanced title `7d2d2c8`; populated browser check pending |
+| `/diaries/[id]` | BROWSER VERIFIED | Eyebrow/chips/title `7d2d2c8`; populated journal verified `p4-d/m-diary-detail` (fixture, cleaned) |
 | `/diaries/new`, `/diaries/[id]/edit` | IMPLEMENTED | `diary-form.tsx` sectioned (Identity/Env/Schedule/Visibility) `7d2d2c8`; browser check pending |
-| `/notifications` | IN PROGRESS | Slice C: scanability polish |
-| `/chat`, `/messages` + ChatPanel/ChatDock | IN PROGRESS | Slice C: room/DM polish, guest wall, mobile sheet |
+| `/notifications` | BROWSER VERIFIED | Group-tinted badges, unread contrast `923ecf6` |
+| `/chat`, `/messages` + ChatPanel/ChatDock | BROWSER VERIFIED | Day separators, jump pill, grouping, guest wall, mobile sheet `923ecf6`; 36/36 checks |
 | `/forum`, thread, category, `/questions`, `/tags` | BROWSER VERIFIED | Slice E `e998c84`: composer shell + shared empty states + tag/hashtag editorial pass; fixture thread+reply created via real `POST /api/forum/threads`+`/api/forum/posts` (`__redesign_ops_*`, cleaned); shots `forum-*-{1440,1024,390}` etc. |
 | `/forum/new` composer | BROWSER VERIFIED | Included above — notices conditional, CTA/cancel normalized; payload + gating unchanged |
 | `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
-| `/strains`, `[slug]`, breeder, new, `/compare` | IN PROGRESS | Slice B1: editorial catalog |
+| `/strains`, `[slug]`, breeder, new, `/compare` | BROWSER VERIFIED | Editorial catalog, facet chips, related strains `9bede73`; 67/67 DOM asserts |
 | `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | BROWSER VERIFIED | Hero composition + deep-link tab fix + hub `341f798`; 24 shots `p3-*-prof-*`. SSR verified; hydration re-check after dev-server restart |
-| `/m/[id]`, `/stories/[username]` | IN PROGRESS | Slice B1: intentional composition (+`4d891b5` byline) |
+| `/m/[id]`, `/stories/[username]` | BROWSER VERIFIED | Author rail + more-from + comment hierarchy `9bede73`; `p3-*-mom-*`, `p3-*-stories-*` |
 | `/progress`, `/achievements`, `/reputation`, `/leaderboard` | IN PROGRESS | Slice D: visual-only hierarchy |
 | `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/digest`, `/mydigest` | IN PROGRESS | Slice D: knowledge surfaces |
 | `/contest`, `/deals`, `/youtubers`, `/welcome` | BROWSER VERIFIED | Slice E `e998c84`: editorial headers, spotlight cards, shared empty states; voting/disclosures/rank gates + onboarding semantics unchanged; 3-viewport shots |
