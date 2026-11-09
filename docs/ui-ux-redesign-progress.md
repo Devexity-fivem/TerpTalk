@@ -121,7 +121,7 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/progress`, `/achievements`, `/reputation`, `/leaderboard` | NOT STARTED | Visual only — never touch V4 logic |
 | `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/compare`, `/digest`, `/mydigest` | NOT STARTED | Educational layouts |
 | `/contest`, `/deals`, `/youtubers` | NOT STARTED | |
-| `/auth/*`, `/welcome` | NOT STARTED | |
+| `/auth/signin`, `/auth/signup` | IMPLEMENTED | Field Journal eyebrow + taglines `b43df4f`; recover/welcome unchanged |
 | `/settings*` | NOT STARTED | |
 | `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | NOT STARTED | Access rules are server-side; UI pass only |
 
