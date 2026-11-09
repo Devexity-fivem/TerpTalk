@@ -106,7 +106,7 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 
 | Route | Status | Notes / evidence |
 |---|---|---|
-| `/` (landing + member home) | IMPLEMENTED | Rhythm cuts `505d912`; Stream still 3-col teaser — restructure OPEN (see §6) |
+| `/` (landing + member home) | BROWSER VERIFIED | Rhythm `505d912`; Stream → unified editorial strip `1422e65` + mobile clip fix `fc3c773`; shots `p2-d/m-stream` |
 | `/feed` | IMPLEMENTED | Card density `505d912`; byline wrap `4d891b5`; shots p2/v2 feed |
 | `/diaries` | BROWSER VERIFIED | Filters + collapse `162f764`,`6b5c65a`; shots `p2-d/m-diaries*`; populated-card review pending seeded data |
 | `/diaries/[id]` | NOT STARTED | Already editorial: week timeline, sticky rail, context column, harvest report — verify in browser, polish only |
@@ -126,11 +126,11 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | NOT STARTED | Access rules are server-side; UI pass only |
 
 ## 6. Exact next continuation point
-1. `npm run lint && npm run test:fast` on `6b5c65a`, then `git push`.
-2. Milestone A remainder: seed a few public diary fixtures (dev DB `ovztvfbvylcdpsuchvps`, unique `__redesign_*` names, clean up after) → screenshot `/diaries` populated + `/diaries/[id]` → polish detail header if needed → diary-form sections pass.
-3. Milestone B: landing Stream restructure — replace the 3-col `/feed` teaser with a compact single-strip activity preview (3 items max + "Explore the feed" link), keeping `FeedCards` types; then `/m/[id]` composition + `/strains` browse polish + `/u/[username]` sections.
-4. Milestone C: chat surface (conversation list/item, message groups, mobile sheet), `/messages`, `/notifications` browser verify.
-5. Milestones D–E: progression visuals, learn pages, auth, settings, admin/mod token consistency; then 5-viewport a11y sweep + `test:master` gate.
+1. Milestone A remainder: seed a few public diary fixtures (dev DB `ovztvfbvylcdpsuchvps`, unique `__redesign_*` names, clean up after) → screenshot `/diaries` populated + `/diaries/[id]` → polish detail header if needed → diary-form sections pass (`diary-form.tsx`, shared new/edit).
+2. Milestone B: `/m/[id]` composition (context rail or intentional single column — decide in browser), `/stories/[username]`, `/strains` browse polish, `/u/[username]` + `/growers` sections.
+3. Milestone C: chat surface (conversation list/item, message groups, mobile sheet, `/chat` 28-line wrapper), `/messages`, `/notifications` browser verify.
+4. Milestones D–E: progression visuals (`/progress`, `/achievements`, `/reputation`, `/leaderboard` — visual only), learn pages, auth, settings, admin/mod token consistency; then 5-viewport a11y sweep + `test:master` gate.
+5. Final: `npm run build` + full gate → final report per §20.
 
 ## 7. Screenshot evidence index
 All under `C:/Users/pablo/AppData/Local/Temp/audit-shots/` — `v2-*` (post-foundation), `p2-*` (post-filters), `new-*` (palette check). Use `reducedMotion:"reduce"` for full-page captures (tt-reveal).
