@@ -88,6 +88,34 @@ const BOT_USERNAME = "terpbot"
 // first keeps the full identity header, followers render compact.
 const GROUP_WINDOW_MS = 5 * 60 * 1000
 
+// Day separator labels for the message log — "Today"/"Yesterday" read
+// warmer than a bare date; older days get a compact weekday + date.
+function dayLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const now = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86_400_000)
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
+  })
+}
+
+function sameDay(a: string, b: string): boolean {
+  const da = new Date(a)
+  const db = new Date(b)
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  )
+}
+
 // Storage is only available in the browser — this component still SSRs.
 const store = typeof window === "undefined" ? null : window.localStorage
 
@@ -517,6 +545,9 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const blockedRef = useRef<Set<string>>(new Set())
   const nearBottomRef = useRef(true)
   const scrolledToUnreadRef = useRef(false)
+  // "Jump to latest" pill — visible whenever the reader is scrolled up
+  // (including when new messages land while they're reading history).
+  const [showJumpLatest, setShowJumpLatest] = useState(false)
   // #msg-<id> deep link — read from the URL once, scrolled to when rendered.
   const anchorMsgRef = useRef<string | null>(null)
   const anchoredRef = useRef(false)
@@ -571,7 +602,17 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current
     if (!el) return
-    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    nearBottomRef.current = near
+    setShowJumpLatest(!near)
+  }, [])
+
+  const jumpToLatest = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    nearBottomRef.current = true
+    setShowJumpLatest(false)
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
   }, [])
 
   useEffect(() => {
@@ -602,6 +643,11 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     }
     if (nearBottomRef.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior })
+      setShowJumpLatest(false)
+    } else {
+      // Content landed while the reader is up in history (or the unread
+      // divider pulled them off the bottom) — offer the way back down.
+      setShowJumpLatest(true)
     }
   }, [messages, unreadBoundaryId])
 
@@ -686,6 +732,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     setUnreadBoundaryId(null)
     nearBottomRef.current = true
     scrolledToUnreadRef.current = false
+    setShowJumpLatest(false)
     // The rewritten URL drops the hash — the old anchor can't apply here.
     anchorMsgRef.current = null
     if (store) {
@@ -1276,7 +1323,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <Tooltip content="Members active on TerpTalk in the last 15 minutes" side="bottom">
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                 <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
                 {onlineCount} online
               </span>
@@ -1299,26 +1346,40 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
 
         {/* Messages */}
         <div className="flex-1 flex flex-col min-h-0">
-          <div
-            ref={messagesContainerRef}
-            onScroll={handleScroll}
-            role="log"
-            aria-live="polite"
-            aria-label={`${room?.name ?? "Chat"} messages`}
-            className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
-          >
+          <div className="relative min-h-0 flex-1">
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleScroll}
+              role="log"
+              aria-live="polite"
+              aria-label={`${room?.name ?? "Chat"} messages`}
+              className="absolute inset-0 overflow-y-auto p-3 sm:p-4 space-y-3"
+            >
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
             ) : room && room.accessible === false ? (
-              <div className="text-center py-10 px-4">
-                <Lock className="w-8 h-8 text-warning mx-auto mb-2" />
-                <p className="font-medium text-sm">{room.name} is a members-only room</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Unlocks at <span className="text-warning font-medium">{room.unlockText ?? `${room.requiredXp?.toLocaleString()} XP`}</span>
+              <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
+                <div className="mb-4 rounded-2xl bg-warning/10 p-3.5 ring-1 ring-warning/25">
+                  <Lock className="h-6 w-6 text-warning" aria-hidden="true" />
+                </div>
+                <h3 className="font-display text-base font-semibold text-foreground">
+                  {room.name} is a members-only room
+                </h3>
+                <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+                  Unlocks at{" "}
+                  <span className="font-medium text-warning">
+                    {room.unlockText ?? `${room.requiredXp?.toLocaleString()} XP`}
+                  </span>
                   {room.description ? ` — ${room.description}` : ""}
                 </p>
+                <Link
+                  href="/progress"
+                  className="mt-4 text-sm font-medium text-primary hover:underline"
+                >
+                  See your progress →
+                </Link>
               </div>
             ) : messages.length === 0 ? (
               <EmptyState
@@ -1329,10 +1390,13 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
             ) : (
               messages.map((msg, i) => {
                 // Group consecutive same-author messages — the first row of
-                // each run keeps the full identity header.
+                // each run keeps the full identity header. A day boundary
+                // always breaks the run (the separator sits between them).
                 const prev = messages[i - 1]
+                const dayBreak = !prev || !sameDay(prev.createdAt, msg.createdAt)
                 const grouped =
                   !!prev &&
+                  !dayBreak &&
                   prev.author.id === msg.author.id &&
                   prev.author.username !== BOT_USERNAME &&
                   msg.author.username !== BOT_USERNAME &&
@@ -1340,6 +1404,15 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                   new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS
                 return (
                   <Fragment key={msg.id}>
+                    {dayBreak && (
+                      <div className="flex items-center gap-2 py-1" role="separator" aria-label={dayLabel(msg.createdAt)}>
+                        <span className="h-px flex-1 bg-border/60" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {dayLabel(msg.createdAt)}
+                        </span>
+                        <span className="h-px flex-1 bg-border/60" />
+                      </div>
+                    )}
                     {msg.id === unreadBoundaryId && (
                       <div className="flex items-center gap-2 py-0.5" role="separator" aria-label="New messages">
                         <span className="h-px flex-1 bg-primary/30" />
@@ -1363,6 +1436,17 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                   </Fragment>
                 )
               })
+            )}
+            </div>
+            {showJumpLatest && !loading && messages.length > 0 && (
+              <button
+                type="button"
+                onClick={jumpToLatest}
+                className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/70 bg-card/95 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:text-foreground"
+              >
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                Latest
+              </button>
             )}
           </div>
 
@@ -1460,6 +1544,17 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               </p>
             )}
 
+            {inputValue.length > 850 && (
+              <p
+                className={cn(
+                  "mb-1 text-right text-[10px] tabular-nums",
+                  inputValue.length >= 990 ? "text-warning" : "text-muted-foreground"
+                )}
+              >
+                {inputValue.length}/1000
+              </p>
+            )}
+
             <div className="flex gap-1.5 items-center">
               <Tooltip content="Insert emoji">
                 <button
@@ -1535,7 +1630,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               <Tooltip content="Send message">
                 <button
                   type="submit"
-                  disabled={!room || sending || (room?.locked && !isStaff)}
+                  disabled={!room || sending || !inputValue.trim() || (room?.locked && !isStaff)}
                   aria-label="Send message"
                   className="tt-cta text-primary-foreground p-2.5 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
