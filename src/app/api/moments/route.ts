@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { runKeyedTx, contentLockKey } from "@/lib/interaction-lifecycle"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, enforceLinkTrust, blockExistsBetween } from "@/lib/security"
 import { progressionRateLimit, getProgressionPerks, awardProgression } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -132,21 +134,42 @@ export async function POST(request: Request) {
     }
 
     const tagIds = kind === "POST" ? await resolveHashtagIds(parseHashtags(content)) : []
-    const moment = await prisma.moment.create({
-      data: {
-        kind,
-        content,
-        visibility,
-        authorId: userId,
-        diaryId,
-        strainId,
-        repostOfId: quoted?.id ?? null,
-        expiresAt: kind === "STORY" ? new Date(Date.now() + STORY_TTL_MS) : null,
-        images: { create: imageUrls.map((url, order) => ({ url, order })) },
-        tags: { create: tagIds.map((tagId) => ({ tagId })) },
-      },
-      select: { id: true },
-    })
+    const createMoment = (tx: Prisma.TransactionClient | typeof prisma) =>
+      tx.moment.create({
+        data: {
+          kind,
+          content,
+          visibility,
+          authorId: userId,
+          diaryId,
+          strainId,
+          repostOfId: quoted?.id ?? null,
+          expiresAt: kind === "STORY" ? new Date(Date.now() + STORY_TTL_MS) : null,
+          images: { create: imageUrls.map((url, order) => ({ url, order })) },
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        },
+        select: { id: true },
+      })
+    // A quote is a repost-family interaction: the moment row and its
+    // REPOST_RECEIVED grant commit in ONE Serializable transaction under
+    // the shared repost:{user}:{target} key lock — the same key the pure
+    // repost toggle, owner delete, moderation delete, and outbox drain
+    // use, so last-live-repost semantics hold across quote+pure mixes.
+    // MOMENT_POSTED stays a separate post-commit award (self-action,
+    // unique per-moment key — no interaction lifecycle).
+    const repostKey = quoted && quoted.authorId !== userId ? `repost:${userId}:moment:${quoted.id}` : null
+    const moment = repostKey
+      ? await runKeyedTx([repostKey, contentLockKey("moment", quoted!.id)], async (tx) => {
+          const row = await createMoment(tx)
+          await awardProgression(quoted!.authorId, "REPOST_RECEIVED", "Someone quoted your post", {
+            actorId: userId,
+            key: repostKey,
+            sourceType: "MOMENT", sourceId: quoted!.id,
+            db: tx,
+          })
+          return row
+        })
+      : await createMoment(prisma)
     imageUrls = []
 
     // Product event: one per persisted moment — best-effort, references
@@ -164,14 +187,9 @@ export async function POST(request: Request) {
       key: `moment:${moment.id}`,
       sourceType: "MOMENT", sourceId: moment.id,
     })
-    // A quote amplifies the original — standing to the quoted author.
-    if (quoted && quoted.authorId !== userId) {
-      await awardProgression(quoted.authorId, "REPOST_RECEIVED", "Someone quoted your post", {
-        actorId: userId,
-        key: `repost:${userId}:moment:${quoted.id}`,
-        sourceType: "MOMENT", sourceId: quoted.id,
-      })
-    }
+    // A quote amplifies the original — standing to the quoted author,
+    // awarded inside the repost-key transaction above (atomic with the
+    // quote row). Nothing to do here.
 
     const actorName = session.user.name || "Someone"
     const link = momentPath(moment.id)

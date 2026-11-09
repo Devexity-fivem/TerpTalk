@@ -35,7 +35,13 @@ export async function lockInteractionKey(
   tx: Prisma.TransactionClient,
   key: string
 ): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('tt-int'), hashtext(${key}))`
+  // pg_advisory_xact_lock returns void, which Prisma's $queryRaw cannot
+  // deserialize — wrap it in count(*) so only an int column is returned.
+  // The lock itself is still acquired; the key is a bound parameter,
+  // never interpolated.
+  await tx.$queryRaw`
+    SELECT count(*)::int AS locked
+    FROM (SELECT pg_advisory_xact_lock(hashtext('tt-int'), hashtext(${key}))) AS _lock`
 }
 
 type Db = Prisma.TransactionClient | typeof prisma
@@ -66,7 +72,12 @@ export async function keyedInteractionActive(key: string, db: Db = prisma): Prom
       where: { userId: reactorId, ...field },
       select: { id: true },
     })
-    return !!row
+    if (!row) return false
+    // Parent-content liveness: a reaction row can outlive its target
+    // (soft-delete cascades don't remove it). The interaction is only
+    // "active" while the target itself is still live — otherwise a
+    // stale keyed reconcile could restore standing on deleted content.
+    return targetContentLive(kind, targetId, db)
   }
 
   // repost:{userId}:moment:{momentId} — live while ≥1 non-deleted repost
@@ -76,7 +87,8 @@ export async function keyedInteractionActive(key: string, db: Db = prisma): Prom
     const n = await db.moment.count({
       where: { authorId: repost[1], repostOfId: repost[2], deleted: false },
     })
-    return n > 0
+    if (n === 0) return false
+    return momentLive(repost[2], db)
   }
 
   // comment:{userId}:moment:{momentId} — live while ≥1 non-deleted
@@ -86,10 +98,44 @@ export async function keyedInteractionActive(key: string, db: Db = prisma): Prom
     const n = await db.momentComment.count({
       where: { authorId: comment[1], momentId: comment[2], deleted: false },
     })
-    return n > 0
+    if (n === 0) return false
+    return momentLive(comment[2], db)
   }
 
   return null
+}
+
+// A moment counts as live content while it isn't soft-deleted. Mirrors
+// the eligibility the award paths checked at creation; visibility
+// changes are not lifecycle events (no reversal semantics exist for
+// them), so only the deleted flag gates here.
+async function momentLive(momentId: string, db: Db): Promise<boolean> {
+  const m = await db.moment.findUnique({ where: { id: momentId }, select: { deleted: true } })
+  return !!m && !m.deleted
+}
+
+// Parent liveness for each reaction target kind — same eligibility the
+// reaction route enforced at write time, reduced to the lifecycle
+// boundary (deletion). Returns false when the target is gone or deleted.
+async function targetContentLive(kind: string, targetId: string, db: Db): Promise<boolean> {
+  if (kind === "moment") return momentLive(targetId, db)
+  if (kind === "post") {
+    const p = await db.post.findUnique({
+      where: { id: targetId },
+      select: { deleted: true, thread: { select: { deleted: true, category: { select: { hidden: true } } } } },
+    })
+    return !!p && !p.deleted && !p.thread?.deleted && !p.thread?.category?.hidden
+  }
+  if (kind === "diary") {
+    const d = await db.growDiary.findUnique({ where: { id: targetId }, select: { deleted: true } })
+    return !!d && !d.deleted
+  }
+  // update → its grow's deletion state governs
+  const u = await db.diaryUpdate.findUnique({
+    where: { id: targetId },
+    select: { diary: { select: { deleted: true } } },
+  })
+  return !!u && !u.diary.deleted
 }
 
 // ─── Award spec derivation ──────────────────────────────────────────

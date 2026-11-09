@@ -8,6 +8,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush, notificationLinkWhere, postLinkWhere, commentLinkWhere } from "@/lib/notify"
 import { enqueueReversals, drainMany, type ReversalIntent } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany, type XpReversalIntent } from "@/lib/progression-outbox"
+import { lockInteractionKey } from "@/lib/interaction-state"
+import { lockInteractionKeys, contentLockKey } from "@/lib/interaction-lifecycle"
 import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getPusher } from "@/lib/pusher"
@@ -186,6 +188,9 @@ export async function POST(request: Request) {
         switch (targetType) {
           case "THREAD": {
             const t = await tx.thread.findUnique({ where: { id: targetId }, select: { slug: true } })
+            // Content lock: serializes against reaction creates on any
+            // post in the thread before the delete + SOURCE sweeps.
+            await lockInteractionKey(tx, contentLockKey("thread", targetId))
             ok = !!(await tx.thread.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok && t) {
               deletedLink = [`/forum/thread/${t.slug}`]
@@ -224,6 +229,9 @@ export async function POST(request: Request) {
           }
           case "POST": {
             const p = await tx.post.findUnique({ where: { id: targetId }, select: { threadId: true } })
+            // Content lock at thread granularity — same key post
+            // reactions hold.
+            if (p) await lockInteractionKey(tx, contentLockKey("thread", p.threadId))
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
               repIntents.push( {
@@ -274,6 +282,9 @@ export async function POST(request: Request) {
           }
           case "DIARY": {
             const d = await tx.growDiary.findUnique({ where: { id: targetId }, select: { slug: true } })
+            // Content lock: covers reactions on the diary and on every
+            // update (update reactions hold the parent diary key).
+            await lockInteractionKey(tx, contentLockKey("diary", targetId))
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
               repIntents.push( {
@@ -348,6 +359,14 @@ export async function POST(request: Request) {
           }
           case "MOMENT": {
             const mm = await tx.moment.findUnique({ where: { id: targetId }, select: { id: true, repostOfId: true, authorId: true } })
+            // Locks BEFORE mutating: the moment content key serializes
+            // against reactions/comments/reposts on it; the repost key
+            // (when this row is itself a repost) serializes the
+            // remaining-live count + KEY intent against repost lifecycle.
+            await lockInteractionKeys(tx, [
+              contentLockKey("moment", targetId),
+              ...(mm?.repostOfId ? [`repost:${mm.authorId}:moment:${mm.repostOfId}`] : []),
+            ])
             ok = !!(await tx.moment.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok && mm) {
               deletedLink = [`/m/${targetId}`]
@@ -393,6 +412,12 @@ export async function POST(request: Request) {
               where: { id: targetId },
               select: { authorId: true, deleted: true, momentId: true, moment: { select: { authorId: true } } },
             })
+            // Shared comment-key lock BEFORE mutating — serializes the
+            // last-live-comment count and KEY intent against comment
+            // create/delete and the outbox reconcile for this key.
+            if (mc) {
+              await lockInteractionKey(tx, `comment:${mc.authorId}:moment:${mc.momentId}`)
+            }
             // updateMany matches live AND already-deleted rows so a
             // repeated action stays idempotent — the reversal check below
             // only runs when this call actually performed the delete.

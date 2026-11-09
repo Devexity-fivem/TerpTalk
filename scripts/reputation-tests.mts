@@ -110,6 +110,8 @@ import {
   publicXpLabel,
 } from "@/lib/progression-config"
 import { drainPendingXpReversals, reverseXpSourceDurable, enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { runKeyedTx, runKeyedTxRO, contentLockKey } from "@/lib/interaction-lifecycle"
+import { lockInteractionKey, keyedInteractionActive } from "@/lib/interaction-state"
 
 const RUN_TAG = Date.now().toString(36)
 const TEST_USERNAME = `__test_rep_${RUN_TAG}`
@@ -2458,6 +2460,294 @@ async function run() {
         0,
         "no resume-marker rows are written"
       )
+    }
+
+    // ── V4 locked lifecycle: advisory-lock primitive + route-boundary races ──
+    // These exercise the SAME transaction boundaries the routes use:
+    // runKeyedTx/runKeyedTxRO take the per-key advisory lock, and the
+    // award/reversal runs on the locked tx client. pg_try_advisory_* is
+    // the deterministic probe — it reports lock state directly, no sleeps.
+    {
+      const probeKey = `probe:${RUN_TAG}`
+      const tryLock = (key: string) =>
+        prisma.$transaction(async (tx) => {
+          const r = await tx.$queryRaw<{ got: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(hashtext('tt-int'), hashtext(${key})) AS got`
+          return r[0].got
+        })
+      // Same key: second tx cannot enter while first holds it.
+      let releaseProbe!: () => void
+      const probeBarrier = new Promise<void>((r) => (releaseProbe = r))
+      const holder = prisma.$transaction(async (tx) => {
+        await lockInteractionKey(tx, probeKey)
+        await probeBarrier
+        await tx.follow.create({ data: { followerId: pv2[0], followingId: pv2[1] } }).catch(() => {})
+      })
+      // Wait until the holder actually owns the lock (bounded DB-state poll).
+      for (let i = 0; i < 100 && (await tryLock(probeKey)); i++) {
+        await new Promise((r) => setTimeout(r, 20))
+      }
+      assert.equal(await tryLock(probeKey), false, "same key is mutually exclusive")
+      assert.equal(await tryLock(`probe:${RUN_TAG}:other`), true, "different key proceeds independently")
+      releaseProbe()
+      await holder
+      assert.equal(await tryLock(probeKey), true, "lock released on commit")
+      // Rollback also releases.
+      await assert.rejects(
+        prisma.$transaction(async (tx) => {
+          await lockInteractionKey(tx, probeKey)
+          throw new Error("rollback probe")
+        })
+      )
+      assert.equal(await tryLock(probeKey), true, "lock released on rollback")
+      // The holder's committed row is visible to a later locked tx.
+      const seen = await runKeyedTxRO(probeKey, async (tx) =>
+        tx.follow.findUnique({
+          where: { followerId_followingId: { followerId: pv2[0], followingId: pv2[1] } },
+          select: { id: true },
+        })
+      )
+      assert.ok(seen, "second tx observes first tx's committed state")
+      await prisma.follow.deleteMany({ where: { followerId: pv2[0], followingId: pv2[1] } })
+    }
+
+    // RACE A — first-ever interaction: add tx (row+award atomic) vs
+    // remove tx on the SAME lock. Removal cannot commit while the add
+    // is in flight; after add commits it sees the row and reverses it.
+    {
+      const { follower, followed, key, row, want } = await followPair("lk-a")
+      let releaseAdd!: () => void
+      const addBarrier = new Promise<void>((r) => (releaseAdd = r))
+      const addP = runKeyedTx(key, async (tx) => {
+        await tx.follow.create({ data: row })
+        await awardProgression(followed, "FOLLOWER_GAINED", "A grower followed you", {
+          actorId: follower, key, sourceType: "USER", sourceId: followed, db: tx,
+        })
+        await addBarrier // hold the tx open AFTER writes, BEFORE commit
+      })
+      // Prove the add tx holds the key lock before starting the remove.
+      for (let i = 0; i < 100; i++) {
+        const held = await prisma.$transaction(async (tx) => {
+          const r = await tx.$queryRaw<{ got: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(hashtext('tt-int'), hashtext(${key})) AS got`
+          return !r[0].got
+        })
+        if (held) break
+        await new Promise((r) => setTimeout(r, 20))
+      }
+      const remP = runKeyedTxRO(key, async (tx) => {
+        await tx.follow.deleteMany({ where: row })
+        return enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+      })
+      releaseAdd()
+      await addP
+      const intentId = await remP // waited on the lock, then deleted+enqueued
+      assert.equal(await drainXpOne(intentId), true)
+      assert.equal(await prisma.follow.count({ where: row }), 0, "no follow remains")
+      const led = await keyLedger(key)
+      assert.ok(led.orig, "grant was created atomically with the follow")
+      assert.ok(led.orig!.reversedAt, "drain reversed it — absent interaction, absent reward")
+      assert.equal(await standingOf(followed), 0)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+      void want
+    }
+
+    // RACE B — reversed grant, re-add tx vs second remove tx: whichever
+    // commits last determines final state; both orders stay consistent.
+    for (const winner of ["add", "remove"] as const) {
+      const { follower, followed, key, row, want } = await followPair(`lk-b-${winner}`)
+      // Establish: follow + award + remove + drain → reversed grant.
+      await runKeyedTx(key, async (tx) => {
+        await tx.follow.create({ data: row })
+        await awardProgression(followed, "FOLLOWER_GAINED", "A grower followed you", {
+          actorId: follower, key, sourceType: "USER", sourceId: followed, db: tx,
+        })
+      })
+      const firstIntent = await runKeyedTxRO(key, async (tx) => {
+        await tx.follow.deleteMany({ where: row })
+        return enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+      })
+      assert.equal(await drainXpOne(firstIntent), true)
+      assert.ok((await keyLedger(key)).orig!.reversedAt, "grant reversed before race")
+
+      let release!: () => void
+      const barrier = new Promise<void>((r) => (release = r))
+      const reAdd = () =>
+        runKeyedTx(key, async (tx) => {
+          await tx.follow.create({ data: row })
+          await awardProgression(followed, "FOLLOWER_GAINED", "A grower followed you", {
+            actorId: follower, key, sourceType: "USER", sourceId: followed, db: tx,
+          })
+          await barrier
+        })
+      const reMove = () =>
+        runKeyedTxRO(key, async (tx) => {
+          await tx.follow.deleteMany({ where: row })
+          return enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+        })
+      let intentId = ""
+      if (winner === "add") {
+        // Re-add commits first (held open), then remove sees the row.
+        const p = reAdd()
+        for (let i = 0; i < 100; i++) {
+          const held = await prisma.$transaction(async (tx) => {
+            const r = await tx.$queryRaw<{ got: boolean }[]>`
+              SELECT pg_try_advisory_xact_lock(hashtext('tt-int'), hashtext(${key})) AS got`
+            return !r[0].got
+          })
+          if (held) break
+          await new Promise((r) => setTimeout(r, 20))
+        }
+        const rp = reMove()
+        release()
+        await p
+        intentId = await rp
+      } else {
+        // Remove runs first — no row exists yet, so it's a no-op delete
+        // that still enqueues; the re-add then commits and wins. The
+        // pending intent reconciles against the live follow on drain.
+        intentId = await reMove()
+        const p = reAdd()
+        release()
+        await p
+      }
+      assert.equal(await drainXpOne(intentId), true)
+      const followExists = (await prisma.follow.count({ where: row })) === 1
+      const led = await keyLedger(key)
+      const grantActive = !!led.orig && led.orig.reversedAt === null
+      assert.equal(grantActive, followExists, `${winner}: reward must equal interaction state`)
+      assert.equal(await standingOf(followed), followExists ? want : 0)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+    }
+
+    // PARENT DELETION — a reaction on a moment whose parent is deleted
+    // must not resolve active or retain standing, even though the
+    // reaction row itself still exists.
+    {
+      const { reactor, author, moment, key } = await reactPair("parent")
+      await runKeyedTx([key, contentLockKey("moment", moment.id)], async (tx) => {
+        await tx.reaction.create({ data: { type: "LIKE", userId: reactor, momentId: moment.id } })
+        await awardProgression(author, "MOMENT_REACTION_RECEIVED", "Someone reacted to your content", {
+          actorId: reactor, key, sourceType: "MOMENT", sourceId: moment.id,
+          meta: { reactionType: "LIKE" }, db: tx,
+        })
+      })
+      assert.equal(await standingOf(author), XP_TABLE.MOMENT_REACTION_RECEIVED.standing)
+      // Parent delete under the SAME content lock + SOURCE sweep — the
+      // route shape (owner/moderation delete).
+      const srcIntent = await prisma.$transaction(async (tx) => {
+        await lockInteractionKey(tx, contentLockKey("moment", moment.id))
+        await tx.moment.update({ where: { id: moment.id }, data: { deleted: true } })
+        return enqueueXpReversal(tx, {
+          kind: "SOURCE", sourceType: "MOMENT", sourceId: moment.id,
+          reason: "Moment removed", requestedBy: author,
+        })
+      })
+      assert.equal(await drainXpOne(srcIntent), true)
+      // Resolver must report the interaction inactive despite the
+      // surviving reaction row — parent liveness gates it.
+      assert.equal(await keyedInteractionActive(key), false, "reaction on deleted moment is inactive")
+      const led = await keyLedger(key)
+      assert.ok(led.orig!.reversedAt, "SOURCE sweep reversed the keyed grant")
+      assert.equal(await standingOf(author), 0)
+      // A later KEY drain for the same key must not resurrect standing.
+      const keyIntent = await enqueueXpReversal(prisma, {
+        kind: "KEY", eventKey: key, reason: "Reaction removed", requestedBy: reactor,
+      })
+      assert.equal(await drainXpOne(keyIntent), true)
+      assert.ok((await keyLedger(key)).orig!.reversedAt, "keyed drain cannot reinstate on deleted content")
+      assert.equal(await standingOf(author), 0)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await prisma.reaction.deleteMany({ where: { userId: reactor, momentId: moment.id } })
+      await prisma.moment.delete({ where: { id: moment.id } }).catch(() => {})
+      await masteryDrift(author)
+    }
+
+    // REPOST + COMMENT last-live semantics under the locked lifecycle:
+    // two live reposts share one key — removing one keeps the grant;
+    // removing the last reverses it. Same for comments.
+    {
+      const { author } = await reactPair("rc-fixture")
+      const target = await prisma.moment.create({ data: { authorId: author, content: `rc ${RUN_TAG}` } })
+      const repKey = `repost:${author}:moment:${target.id}`
+      const cKey = `comment:${author}:moment:${target.id}`
+      const repActor = await mkPv2(`rc-r`, 3)
+      await seedProgression(repActor, 0, 100)
+      // Two repost rows by the SAME member on the target — wait, repost
+      // key is per (reposter,target): use repActor as reposter.
+      const repKey2 = `repost:${repActor}:moment:${target.id}`
+      await runKeyedTx([repKey2, contentLockKey("moment", target.id)], async (tx) => {
+        await tx.moment.create({ data: { kind: "POST", content: "", visibility: "PUBLIC", authorId: repActor, repostOfId: target.id } })
+        await awardProgression(author, "REPOST_RECEIVED", "Someone reposted your post", {
+          actorId: repActor, key: repKey2, sourceType: "MOMENT", sourceId: target.id, db: tx,
+        })
+      })
+      assert.equal(await standingOf(author), XP_TABLE.REPOST_RECEIVED.standing)
+      // A second live repost (quote) by same member — still one grant.
+      await prisma.moment.create({ data: { kind: "POST", content: "quote", visibility: "PUBLIC", authorId: repActor, repostOfId: target.id } })
+      // Remove ONE repost → remaining live → NO reversal intent (route logic).
+      const doomed = await prisma.moment.findFirst({
+        where: { authorId: repActor, repostOfId: target.id, content: "", deleted: false },
+        select: { id: true },
+      })
+      await prisma.$transaction(async (tx) => {
+        await tx.moment.update({ where: { id: doomed!.id }, data: { deleted: true } })
+        const remaining = await tx.moment.count({ where: { authorId: repActor, repostOfId: target.id, deleted: false } })
+        if (remaining === 0) {
+          await enqueueXpReversal(tx, { kind: "KEY", eventKey: repKey2, reason: "Repost removed", requestedBy: repActor })
+        }
+      })
+      assert.equal(
+        await prisma.pendingXpReversal.count({ where: { eventKey: repKey2 } }),
+        0,
+        "one remaining repost → no reversal intent"
+      )
+      const orig = await prisma.progressionEvent.findUnique({ where: { key: repKey2 } })
+      assert.equal(orig!.reversedAt, null, "grant survives while a repost remains")
+      // Remove the LAST repost → reversal.
+      const lastIntent = await prisma.$transaction(async (tx) => {
+        await tx.moment.updateMany({ where: { authorId: repActor, repostOfId: target.id, deleted: false }, data: { deleted: true } })
+        return enqueueXpReversal(tx, { kind: "KEY", eventKey: repKey2, reason: "Repost removed", requestedBy: repActor })
+      })
+      assert.equal(await drainXpOne(lastIntent), true)
+      assert.ok((await prisma.progressionEvent.findUnique({ where: { key: repKey2 } }))!.reversedAt)
+      // Resolver agrees: no live reposts → inactive.
+      assert.equal(await keyedInteractionActive(repKey2), false)
+
+      // Comments: two comments by same member, remove one → grant stays;
+      // remove last → reverses.
+      const commenter = await mkPv2(`rc-c`, 3)
+      await seedProgression(commenter, 0, 100)
+      const cKey2 = `comment:${commenter}:moment:${target.id}`
+      await runKeyedTx([cKey2, contentLockKey("moment", target.id)], async (tx) => {
+        await tx.momentComment.create({ data: { momentId: target.id, authorId: commenter, content: "one" } })
+        await awardProgression(author, "COMMENT_RECEIVED", "Someone commented on your post", {
+          actorId: commenter, key: cKey2, sourceType: "MOMENT", sourceId: target.id, db: tx,
+        })
+      })
+      const before = await standingOf(author)
+      await prisma.momentComment.create({ data: { momentId: target.id, authorId: commenter, content: "two" } })
+      const c1 = await prisma.momentComment.findFirst({ where: { momentId: target.id, authorId: commenter, content: "one" }, select: { id: true } })
+      await prisma.$transaction(async (tx) => {
+        await tx.momentComment.update({ where: { id: c1!.id }, data: { deleted: true } })
+        const remaining = await tx.momentComment.count({ where: { momentId: target.id, authorId: commenter, deleted: false } })
+        if (remaining === 0) {
+          await enqueueXpReversal(tx, { kind: "KEY", eventKey: cKey2, reason: "Comment removed", requestedBy: commenter })
+        }
+      })
+      assert.equal(await standingOf(author), before, "one remaining comment → grant intact")
+      const cLast = await prisma.$transaction(async (tx) => {
+        await tx.momentComment.updateMany({ where: { momentId: target.id, authorId: commenter, deleted: false }, data: { deleted: true } })
+        return enqueueXpReversal(tx, { kind: "KEY", eventKey: cKey2, reason: "Comment removed", requestedBy: commenter })
+      })
+      assert.equal(await drainXpOne(cLast), true)
+      assert.ok((await prisma.progressionEvent.findUnique({ where: { key: cKey2 } }))!.reversedAt)
+      assert.equal(await keyedInteractionActive(cKey2), false)
+      await masteryDrift(author)
+      void repKey
+      void cKey
     }
 
     // Progression drift invariant on fixtures: xp == Σ ledger.

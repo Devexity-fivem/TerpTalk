@@ -9,7 +9,7 @@ import { notify } from "@/lib/notify"
 import { canViewMoment, momentPath } from "@/lib/moments"
 import { awardProgression } from "@/lib/progression"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
-import { lockInteractionKey } from "@/lib/interaction-state"
+import { runKeyedTx, contentLockKey } from "@/lib/interaction-lifecycle"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -52,10 +52,10 @@ export async function POST(request: Request, { params }: Ctx) {
     // the same transaction as the delete.
     let reversalId: string | null = null
     const repostKey = `repost:${userId}:moment:${id}`
-    const result = await prisma.$transaction(async (tx) => {
-      // Shared per-key lock — serializes this toggle against comment/
-      // follow/react transitions and the outbox reconcile for repostKey.
-      await lockInteractionKey(tx, repostKey)
+    // Serializable: the create branch awards inside this tx. Locks: the
+    // repost key (shared lifecycle) + the target moment's content key
+    // (serializes against moment deletion's SOURCE sweep).
+    const result = await runKeyedTx([repostKey, contentLockKey("moment", id)], async (tx) => {
       await lockUserRow(tx, userId)
       const existing = await tx.moment.findFirst({
         where: { authorId: userId, repostOfId: id, content: "", deleted: false, kind: "POST" },

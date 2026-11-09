@@ -14,6 +14,8 @@ import { awardProgression, checkDuplicateContent } from "@/lib/progression"
 import { QUALITY_BANDS } from "@/lib/progression-config"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { lockInteractionKey } from "@/lib/interaction-state"
+import { contentLockKey } from "@/lib/interaction-lifecycle"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
@@ -509,6 +511,9 @@ export async function DELETE(request: Request) {
     let reversalId: string | null = null
     let xpReversalId: string | null = null
     await prisma.$transaction(async (tx) => {
+      // Content lock at THREAD granularity — reactions on this post hold
+      // content:thread:{threadId}; serializes against their creates.
+      await lockInteractionKey(tx, contentLockKey("thread", post.threadId))
       await tx.post.update({ where: { id }, data: { deleted: true } })
       // Detach image rows so the blob cleanup's reference check sees the
       // post as truly unlinked. Restore paths re-attach nothing — deleted

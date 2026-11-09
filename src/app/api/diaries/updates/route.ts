@@ -9,6 +9,7 @@ import { awardProgressionBatch, checkDuplicateContent, updateBand, type Progress
 import { awardExperimentFollowups } from "@/lib/experiment-progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
+import { lockInteractionKeys, contentLockKey } from "@/lib/interaction-lifecycle"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -662,6 +663,14 @@ export async function DELETE(request: Request) {
         where: { diaryUpdateId: id, deleted: false },
         select: { id: true, threadId: true },
       })
+      // Content locks BEFORE any mutation: the update key serializes
+      // against reactions on this update; each anchored post's THREAD
+      // key serializes against reactions on those posts — so no child
+      // award can commit after this delete's SOURCE sweeps drain.
+      await lockInteractionKeys(tx, [
+        contentLockKey("update", id),
+        ...new Set(anchored.map((p) => contentLockKey("thread", p.threadId))),
+      ])
       removedComments = anchored.length
       if (anchored.length > 0) {
         const postIds = anchored.map((p) => p.id)

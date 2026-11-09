@@ -7,6 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
+import { lockInteractionKey } from "@/lib/interaction-state"
+import { contentLockKey } from "@/lib/interaction-lifecycle"
 import { notificationLinkWhere, fanoutFollowedContent } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -309,6 +311,10 @@ export async function DELETE(request: Request) {
     const reversalIds: string[] = []
     const xpReversalIds: string[] = []
     const imageUrls = await prisma.$transaction(async (tx) => {
+      // Content lock: serializes against reaction creates on this diary
+      // AND on any of its updates (update reactions hold the parent
+      // diary key too), so no child award commits post-sweep.
+      await lockInteractionKey(tx, contentLockKey("diary", id))
       // threadId goes null with the diary: the discussion thread survives as
       // a normal thread, and no diary context can leak through it.
       await tx.growDiary.update({ where: { id }, data: { deleted: true, threadId: null } })

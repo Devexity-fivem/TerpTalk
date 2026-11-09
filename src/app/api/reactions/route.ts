@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
 import { progressionRateLimit, awardProgression } from "@/lib/progression"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
-import { runKeyedTx, runKeyedTxRO } from "@/lib/interaction-lifecycle"
+import { runKeyedTx, runKeyedTxRO, contentLockKey } from "@/lib/interaction-lifecycle"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
@@ -82,12 +82,15 @@ export async function POST(request: Request) {
     let targetAuthorId: string | null = null
     let targetLink: string | null = null
     let targetTitle: string | null = null
+    // Content-scope lock keys for the resolved target — held by the
+    // create tx so it serializes against deletion of the parent content.
+    let contentKeys: string[] = []
     if (hasPostId) {
       const post = await prisma.post.findUnique({
         where: { id: postId, deleted: false },
         select: {
           authorId: true,
-          thread: { select: { slug: true, title: true, deleted: true, category: { select: { hidden: true } } } },
+          thread: { select: { id: true, slug: true, title: true, deleted: true, category: { select: { hidden: true } } } },
         },
       })
       if (!post || post.thread?.deleted || post.thread?.category?.hidden) {
@@ -96,6 +99,9 @@ export async function POST(request: Request) {
       targetAuthorId = post.authorId
       targetLink = post.thread ? postDeepLink(post.thread.slug, postId) : null
       targetTitle = post.thread?.title ?? null
+      // Post reactions serialize against THREAD deletion — the scope at
+      // which POST-sourced awards are swept.
+      if (post.thread) contentKeys = [contentLockKey("thread", post.thread.id)]
     } else if (hasDiaryId) {
       const diary = await prisma.growDiary.findUnique({
         where: { id: diaryId, deleted: false },
@@ -107,6 +113,7 @@ export async function POST(request: Request) {
       targetAuthorId = diary.authorId
       targetLink = diaryPath(diary)
       targetTitle = diary.title
+      contentKeys = [contentLockKey("diary", diaryId)]
     } else if (hasMomentId) {
       // Moment — the canonical audience rule (lib/moments.ts), uniform 404.
       // A pure repost is a pointer: the reaction lands on the original.
@@ -119,6 +126,7 @@ export async function POST(request: Request) {
       targetAuthorId = m.authorId
       targetLink = momentPath(m.id)
       targetTitle = null
+      contentKeys = [contentLockKey("moment", m.id)]
     } else {
       // Grow update — inherits its grow's canonical view rule
       // (canViewDiary: PRIVATE = owner only), plus deleted-grow and
@@ -147,6 +155,10 @@ export async function POST(request: Request) {
       targetAuthorId = update.diary.authorId
       targetLink = updateAnchor(diaryPath(update.diary), update.id)
       targetTitle = update.title
+      // Update reactions hold BOTH the update key (update-delete sweeps
+      // DIARY_UPDATE sources) and the parent diary key (diary-delete
+      // sweeps every update's sources without enumerating them).
+      contentKeys = [contentLockKey("update", update.id), contentLockKey("diary", update.diary.id)]
     }
 
     // Blocked users can't react to each other's content (previously only
@@ -224,7 +236,10 @@ export async function POST(request: Request) {
     // The lock also absorbs the double-click race: a concurrent create
     // for the same key waits, then sees the committed row.
     let reaction
-    await runKeyedTx(socialKey, async (tx) => {
+    // The create tx holds the interaction key AND the parent-content
+    // lock(s) — a target deletion cannot commit its reversal sweep
+    // between this reaction's commit and its drain.
+    await runKeyedTx([socialKey, ...contentKeys], async (tx) => {
       const dup = await tx.reaction.findFirst({
         where: { userId: session.user.id, ...target },
       })

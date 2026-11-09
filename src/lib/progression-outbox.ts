@@ -9,6 +9,7 @@ import {
   reverseProgressionByKey,
   reverseProgressionByActor,
   awardProgression,
+  reinstateProgressionByKey,
   ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
 import { keyedInteractionActive, keyedAwardSpec } from "@/lib/interaction-state"
@@ -160,9 +161,16 @@ async function reconcileKeyedIntent(
         })
       } else {
         // Resolvable interaction but no derivable award spec — reinstate
-        // only (covers keys whose award shape we can't reconstruct).
-        const { reinstateProgressionByKey } = await import("@/lib/progression")
-        await reinstateProgressionByKey(key)
+        // on the SAME tx client (never an independent transaction). If
+        // the grant can't be safely reinstated, throw so the intent
+        // stays recoverable with a clear error instead of completing
+        // against uncertain state.
+        const reinstate = await reinstateProgressionByKey(key, tx)
+        if (!reinstate.awarded && !reinstate.reinstated) {
+          throw new Error(
+            `keyed award underivable for active interaction: ${key} (${reinstate.skippedReason ?? "unknown"})`
+          )
+        }
       }
       await tx.pendingXpReversal.delete({ where: { id } })
       return "completed" as const

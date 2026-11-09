@@ -8,7 +8,7 @@ import {
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
-import { runKeyedTx } from "@/lib/interaction-lifecycle"
+import { runKeyedTx, contentLockKey } from "@/lib/interaction-lifecycle"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, notifyMany } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
@@ -91,7 +91,7 @@ export async function POST(request: Request, { params }: Ctx) {
     // the outbox reconcile. Keyed per commenter+moment (not per comment)
     // matching the last-live-engagement reversal semantics.
     const commentKey = `comment:${userId}:moment:${m.id}`
-    const comment = await runKeyedTx(commentKey, async (tx) => {
+    const comment = await runKeyedTx([commentKey, contentLockKey("moment", m.id)], async (tx) => {
       const row = await tx.momentComment.create({
         data: { momentId: m.id, authorId: userId, content: content.trim() },
         select: { id: true, content: true, createdAt: true, authorId: true, author: { select: publicUserSelect } },

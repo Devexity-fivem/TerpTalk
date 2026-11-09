@@ -8,6 +8,7 @@ import { revalidateTag } from "next/cache"
 import { deleteImages } from "@/lib/blob"
 import { invalidateNotificationsForLink } from "@/lib/notify"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { lockInteractionKeys, contentLockKey } from "@/lib/interaction-lifecycle"
 import { getMomentForViewer, momentPath } from "@/lib/moments"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -41,6 +42,14 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     // delete so a crash can't strand progression on removed content.
     const reversalIds: string[] = []
     const urls = await prisma.$transaction(async (tx) => {
+      // Locks BEFORE mutating: the moment content key serializes against
+      // reactions/comments/reposts on this moment; the repost key (when
+      // this row is itself a repost) serializes the remaining-live count
+      // and KEY intent against the repost lifecycle.
+      await lockInteractionKeys(tx, [
+        contentLockKey("moment", id),
+        ...(m.repostOfId ? [`repost:${m.authorId}:moment:${m.repostOfId}`] : []),
+      ])
       await tx.moment.updateMany({ where: { id, deleted: false }, data: { deleted: true } })
       const imgs = await tx.momentImage.findMany({ where: { momentId: id }, select: { url: true } })
       await tx.momentImage.deleteMany({ where: { momentId: id } })

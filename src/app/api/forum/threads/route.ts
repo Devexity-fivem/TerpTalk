@@ -10,6 +10,8 @@ import { STANDING_LINKS, STANDING_POLL_CREATE } from "@/lib/progression-config"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
+import { lockInteractionKey } from "@/lib/interaction-state"
+import { contentLockKey } from "@/lib/interaction-lifecycle"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink, fanoutFollowedContent } from "@/lib/notify"
@@ -420,6 +422,10 @@ export async function DELETE(request: Request) {
     const reversalIds: string[] = []
     const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
+      // Content lock: serializes this delete against reaction creates on
+      // any post in the thread (they hold content:thread:{id}) so no
+      // child award can commit after the SOURCE sweep drains.
+      await lockInteractionKey(tx, contentLockKey("thread", id))
       await tx.thread.update({ where: { id }, data: { deleted: true } })
       // A deleted discussion thread frees the diary's canonical link.
       await tx.growDiary.updateMany({ where: { threadId: id }, data: { threadId: null } })

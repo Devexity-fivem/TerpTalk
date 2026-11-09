@@ -1216,14 +1216,17 @@ async function reinstateProgressionEvent(
 // reinstate path. The durable KEY drain calls this when a resume marker
 // proves a reversal raced a re-created interaction — repairing the
 // balance the stale intent just moved while keeping the audit rows.
-export async function reinstateProgressionByKey(key: string): Promise<ProgressionAwardResult> {
-  const existing = await prisma.progressionEvent.findUnique({
+export async function reinstateProgressionByKey(
+  key: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<ProgressionAwardResult> {
+  const existing = await db.progressionEvent.findUnique({
     where: { key },
     select: { id: true, userId: true, xp: true, standing: true, mastery: true, reversedAt: true, reversalFinal: true },
   })
   if (!existing?.reversedAt) return { awarded: false, skippedReason: "duplicate" }
   if (existing.reversalFinal) return { awarded: false, skippedReason: "locked" }
-  const subject = (await prisma.user.findUnique({
+  const subject = (await db.user.findUnique({
     where: { id: existing.userId },
     select: {
       role: true,
@@ -1235,7 +1238,7 @@ export async function reinstateProgressionByKey(key: string): Promise<Progressio
   })) as SubjectUser | null
   if (!subject?.profile) return { awarded: false, skippedReason: "no-user" }
   if (isInactive(subject)) return { awarded: false, skippedReason: "suspended" }
-  return reinstateProgressionEvent(existing, subject)
+  return reinstateProgressionEvent(existing, subject, db as Prisma.TransactionClient)
 }
 
 // ─── Reversals ───────────────────────────────────────────────────────
