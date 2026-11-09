@@ -109,21 +109,21 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/` (landing + member home) | BROWSER VERIFIED | Rhythm `505d912`; Stream → unified editorial strip `1422e65` + mobile clip fix `fc3c773`; shots `p2-d/m-stream` |
 | `/feed` | IMPLEMENTED | Card density `505d912`; byline wrap `4d891b5`; shots p2/v2 feed |
 | `/diaries` | BROWSER VERIFIED | Filters + collapse `162f764`,`6b5c65a`; shots `p2-d/m-diaries*`; populated-card review pending seeded data |
-| `/diaries/[id]` | NOT STARTED | Already editorial: week timeline, sticky rail, context column, harvest report — verify in browser, polish only |
-| `/diaries/new`, `/diaries/[id]/edit` | NOT STARTED | `diary-form.tsx` (450 lines) shared |
-| `/notifications` | IMPLEMENTED | Already app-composed (groups, unread states, actions) — inherits tokens; browser check pending |
-| `/chat`, `/messages` | NOT STARTED | `/chat` is a 28-line wrapper; surfaces = ChatPanel/ChatDock (unchanged) |
-| `/forum`, thread, category, `/questions`, `/tags` | NOT STARTED | Inherit tokens/serif headers |
+| `/diaries/[id]` | IN PROGRESS | Slice A: editorial polish + timeline/rail review |
+| `/diaries/new`, `/diaries/[id]/edit` | IN PROGRESS | Slice A: `diary-form.tsx` sectioned layout |
+| `/notifications` | IN PROGRESS | Slice C: scanability polish |
+| `/chat`, `/messages` + ChatPanel/ChatDock | IN PROGRESS | Slice C: room/DM polish, guest wall, mobile sheet |
+| `/forum`, thread, category, `/questions`, `/tags` | IN PROGRESS | Slice E: discussion hierarchy/density |
 | `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
-| `/strains`, `[slug]`, breeder, new | NOT STARTED | Detail already well-composed |
-| `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | NOT STARTED | Profile V2 w/ presets exists |
-| `/m/[id]`, `/stories/[username]` | IN PROGRESS | Byline fix `4d891b5`; composition TBD |
-| `/progress`, `/achievements`, `/reputation`, `/leaderboard` | NOT STARTED | Visual only — never touch V4 logic |
-| `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/compare`, `/digest`, `/mydigest` | NOT STARTED | Educational layouts |
-| `/contest`, `/deals`, `/youtubers` | NOT STARTED | |
+| `/strains`, `[slug]`, breeder, new, `/compare` | IN PROGRESS | Slice B1: editorial catalog |
+| `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | IN PROGRESS | Slice B2: profile composition + discovery |
+| `/m/[id]`, `/stories/[username]` | IN PROGRESS | Slice B1: intentional composition (+`4d891b5` byline) |
+| `/progress`, `/achievements`, `/reputation`, `/leaderboard` | IN PROGRESS | Slice D: visual-only hierarchy |
+| `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/digest`, `/mydigest` | IN PROGRESS | Slice D: knowledge surfaces |
+| `/contest`, `/deals`, `/youtubers`, `/welcome` | IN PROGRESS | Slice E |
 | `/auth/signin`, `/auth/signup` | IMPLEMENTED | Field Journal eyebrow + taglines `b43df4f`; recover/welcome unchanged |
-| `/settings*` | NOT STARTED | |
-| `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | NOT STARTED | Access rules are server-side; UI pass only |
+| `/settings*` | IN PROGRESS | Slice E: sections/forms |
+| `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | IN PROGRESS | Slice E: token-consistency pass only |
 
 ## 6. Exact next continuation point
 0. **Gate blocker (2026-11-09):** the full `test:master` run failed 2 suites, both on time limits. `product-events`: the dev server wedged after a concurrent `npm run build`; standalone re-run on a fresh server PASS (100.4s). `diary`: 290/290 assertions PASS standalone, but it takes 804s against the 480s cap, with DB round-trip measured at ~200ms/query from this machine. The redesign diff touches no API/lib code. Re-run the full gate when DB latency is normal; do not raise the timeout. Never run `npm run build` against the dev server while tests run.
