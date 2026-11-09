@@ -97,3 +97,40 @@ The app already has a real design foundation ("Verdant Ember" rebrand):
 - `tt-reveal` scroll-timeline sections render blank in static screenshots — use `reducedMotion` emulation for captures.
 - Setup fixture is private (404 for guests) — setup detail needs a public fixture.
 - Test fixture usernames (`__test_pv2_*`) surface on the landing — data-quality note, not a redesign bug.
+
+---
+
+## 5. Per-route status (Phase 2)
+
+Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWSER VERIFIED` → `COMPLETE` (functionality preserved, interactions tested, desktop+mobile+empty+populated reviewed, no known a11y/visual blocker).
+
+| Route | Status | Notes / evidence |
+|---|---|---|
+| `/` (landing + member home) | IMPLEMENTED | Rhythm cuts `505d912`; Stream still 3-col teaser — restructure OPEN (see §6) |
+| `/feed` | IMPLEMENTED | Card density `505d912`; byline wrap `4d891b5`; shots p2/v2 feed |
+| `/diaries` | BROWSER VERIFIED | Filters + collapse `162f764`,`6b5c65a`; shots `p2-d/m-diaries*`; populated-card review pending seeded data |
+| `/diaries/[id]` | NOT STARTED | Already editorial: week timeline, sticky rail, context column, harvest report — verify in browser, polish only |
+| `/diaries/new`, `/diaries/[id]/edit` | NOT STARTED | `diary-form.tsx` (450 lines) shared |
+| `/notifications` | IMPLEMENTED | Already app-composed (groups, unread states, actions) — inherits tokens; browser check pending |
+| `/chat`, `/messages` | NOT STARTED | `/chat` is a 28-line wrapper; surfaces = ChatPanel/ChatDock (unchanged) |
+| `/forum`, thread, category, `/questions`, `/tags` | NOT STARTED | Inherit tokens/serif headers |
+| `/setups`, `[id]`, new, edit | NOT STARTED | Needs public fixture for detail shots |
+| `/strains`, `[slug]`, breeder, new | NOT STARTED | Detail already well-composed |
+| `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | NOT STARTED | Profile V2 w/ presets exists |
+| `/m/[id]`, `/stories/[username]` | IN PROGRESS | Byline fix `4d891b5`; composition TBD |
+| `/progress`, `/achievements`, `/reputation`, `/leaderboard` | NOT STARTED | Visual only — never touch V4 logic |
+| `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/compare`, `/digest`, `/mydigest` | NOT STARTED | Educational layouts |
+| `/contest`, `/deals`, `/youtubers` | NOT STARTED | |
+| `/auth/*`, `/welcome` | NOT STARTED | |
+| `/settings*` | NOT STARTED | |
+| `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | NOT STARTED | Access rules are server-side; UI pass only |
+
+## 6. Exact next continuation point
+1. `npm run lint && npm run test:fast` on `6b5c65a`, then `git push`.
+2. Milestone A remainder: seed a few public diary fixtures (dev DB `ovztvfbvylcdpsuchvps`, unique `__redesign_*` names, clean up after) → screenshot `/diaries` populated + `/diaries/[id]` → polish detail header if needed → diary-form sections pass.
+3. Milestone B: landing Stream restructure — replace the 3-col `/feed` teaser with a compact single-strip activity preview (3 items max + "Explore the feed" link), keeping `FeedCards` types; then `/m/[id]` composition + `/strains` browse polish + `/u/[username]` sections.
+4. Milestone C: chat surface (conversation list/item, message groups, mobile sheet), `/messages`, `/notifications` browser verify.
+5. Milestones D–E: progression visuals, learn pages, auth, settings, admin/mod token consistency; then 5-viewport a11y sweep + `test:master` gate.
+
+## 7. Screenshot evidence index
+All under `C:/Users/pablo/AppData/Local/Temp/audit-shots/` — `v2-*` (post-foundation), `p2-*` (post-filters), `new-*` (palette check). Use `reducedMotion:"reduce"` for full-page captures (tt-reveal).
