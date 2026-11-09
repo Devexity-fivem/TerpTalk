@@ -72,9 +72,9 @@ The app already has a real design foundation ("Verdant Ember" rebrand):
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Audit + direction doc | ✅ done |
-| 2 | Foundation: palette/typography/density tokens, font swap | ⏳ in progress |
-| 3 | Shell: unified nav (rail, top bar, mobile dock, chat-first) | ⬜ |
-| 4 | Home + Stream density | ⬜ |
+| 2 | Foundation: palette/typography/density tokens, font swap | ✅ `b1b6ada` |
+| 3 | Shell: chat-first rail, consolidated mobile dock | ✅ `505d912` (top-bar drawer + ChatDock unchanged, still coherent) |
+| 4 | Home + Stream density | ✅ partial `505d912` — feed rows + landing rhythm tightened; landing stream still a 3-col teaser (structure TBD) |
 | 5 | Forums + thread detail | ⬜ |
 | 6 | Diaries, setups, strains | ⬜ |
 | 7 | Profiles + moments | ⬜ |
