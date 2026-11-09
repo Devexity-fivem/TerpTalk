@@ -132,5 +132,10 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 4. Milestones D–E: progression visuals (`/progress`, `/achievements`, `/reputation`, `/leaderboard` — visual only), learn pages, auth, settings, admin/mod token consistency; then 5-viewport a11y sweep + `test:master` gate.
 5. Final: `npm run build` + full gate → final report per §20.
 
+## 6b. Next initiative (after this redesign ships) — TerpBot capability expansion
+Sequencing decision: TerpBot work starts **only after** this redesign meets its completion standard (all routes redesigned, browser-verified, full `test:master` green, build green, tracker accurate). **No TerpBot commits on `feat/terptalk-ui-ux-redesign`.**
+
+When started: new branch from the then-approved integration baseline → audit every existing command/event/scheduled task/permission/data path/knowledge source → capability inventory → gap analysis vs. target (structured versioned knowledge engine, deterministic diagnostics, owner-authorized grow-state context, validated calculators, opt-in alert engine, deterministic NL interface, TerpTalk integrations, least-privilege bot identity) → phased architecture + test-fixture plan → independently testable milestones. Hard constraints: no LLMs/generative AI, no invented facts, explainable + auditable outputs, no external APIs without approval, never expose another member's private/unlisted data, no moderation/DM/security powers, keep working commands until migration requirements exist.
+
 ## 7. Screenshot evidence index
 All under `C:/Users/pablo/AppData/Local/Temp/audit-shots/` — `v2-*` (post-foundation), `p2-*` (post-filters), `new-*` (palette check). Use `reducedMotion:"reduce"` for full-page captures (tt-reveal).

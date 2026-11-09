@@ -111,7 +111,7 @@ export default function SignInPage() {
               <CannabisLeaf className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <span className="tt-eyebrow">21+ growers' commons</span>
+          <span className="tt-eyebrow">21+ growers&apos; commons</span>
           <h1 className="font-display text-3xl font-bold tracking-tight mt-2">Welcome to TerpTalk</h1>
           <p className="text-muted-foreground mt-2">Sign in to your grow journal, diaries, and the community.</p>
         </div>
