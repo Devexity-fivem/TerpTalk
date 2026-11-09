@@ -148,7 +148,7 @@ export default function AdminUserDetailPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
         </div>
       </div>
@@ -159,7 +159,7 @@ export default function AdminUserDetailPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Couldn&apos;t load this member</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Couldn&apos;t load this member</h1>
           <p className="text-muted-foreground">{error || "Member not found."}</p>
           <button onClick={() => { setError(""); setLoading(true); load() }} className="mt-4 px-4 py-2 rounded-lg bg-secondary text-sm hover:bg-secondary/80">Retry</button>
         </div>
@@ -174,7 +174,7 @@ export default function AdminUserDetailPage() {
         <div className="flex items-center gap-3 mb-6">
           <User className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">@{user.profile?.username ?? user.name}</h1>
+            <h1 className="text-2xl font-bold font-display">@{user.profile?.username ?? user.name}</h1>
             <p className="text-muted-foreground text-sm">{user._count.posts} posts · {user._count.threadCreator} threads · {user.profile?.xp?.toLocaleString() ?? 0} XP · {user.profile?.standing ?? 0} standing</p>
           </div>
         </div>
@@ -193,15 +193,15 @@ export default function AdminUserDetailPage() {
             { label: "Setups", value: user._count.setupCreator },
             { label: "Chat messages", value: user._count.chatMessages },
           ].map((s) => (
-            <div key={s.label} className="tt-spotlight bg-card rounded-xl border border-border p-4">
-              <div className="text-lg font-bold tabular-nums">{s.value}</div>
+            <div key={s.label} className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
+              <div className="text-xl font-semibold font-display tabular-nums">{s.value}</div>
               <div className="text-xs text-muted-foreground">{s.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6">
-          <h2 className="font-semibold mb-3">Restrictions</h2>
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 mb-6">
+          <h2 className="font-display font-semibold mb-3">Restrictions</h2>
           <div className="flex items-center gap-2 mb-3">
             {user.banned ? <Ban className="w-4 h-4 text-destructive" /> : <Clock className="w-4 h-4 text-muted-foreground" />}
             <span className="text-sm">{user.banned ? `Permanently banned${user.bannedReason ? `: ${user.bannedReason}` : ""}` : user.suspendedUntil ? `Suspended until ${new Date(user.suspendedUntil).toLocaleString()}` : "No active restrictions"}</span>
@@ -229,10 +229,10 @@ export default function AdminUserDetailPage() {
         </div>
 
         {!isAdmin(user.role) && (
-          <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6">
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Progression</h2>
+              <h2 className="font-display font-semibold">Progression</h2>
               {ledger && (
                 <span className={`text-xs ml-auto ${ledger.drift !== 0 ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                   ledger {ledger.ledgerSum} XP{ledger.drift !== 0 ? ` · drift ${ledger.drift > 0 ? "+" : ""}${ledger.drift}` : ""}
@@ -274,9 +274,9 @@ export default function AdminUserDetailPage() {
           </div>
         )}
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-          <div className="p-4 border-b border-border font-semibold">Moderation history</div>
-          <div className="divide-y divide-border">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+          <div className="p-4 border-b border-border/60 font-display font-semibold">Moderation history</div>
+          <div className="divide-y divide-border/50">
             {user.moderationHistory.length === 0 && <p className="p-4 text-sm text-muted-foreground">No moderation actions recorded.</p>}
             {user.moderationHistory.map((h) => (
               <div key={h.id} className="p-3 text-sm flex items-center justify-between gap-3">

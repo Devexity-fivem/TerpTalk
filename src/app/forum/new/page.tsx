@@ -11,6 +11,7 @@ import ImageUploader from "@/components/image-uploader"
 import MarkdownComposer from "@/components/markdown-composer"
 import TagInput from "@/components/tag-input"
 import PollComposer from "@/components/poll-composer"
+import PageHeader from "@/components/ui/page-header"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
@@ -217,29 +218,35 @@ function NewThreadForm() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <Link href="/forum" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
-            ← Back to Discussions
-          </Link>
-          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Create New Discussion</h1>
-          <p className="text-muted-foreground">Start a new discussion in the community</p>
-          {strainCtx && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Asking about{" "}
-              <Link href={`/strains/${strainCtx.slug ?? strainCtx.id}`} className="text-primary hover:underline font-medium">
-                {strainCtx.name}
-              </Link>
-              {tags.some((t) => t.toLowerCase() === strainCtx.name.toLowerCase())
-                ? " — tagged, so it will appear on the strain page."
-                : strainCtx.name.length > 30
-                  ? " — its name is too long for a tag; mention it in the title instead."
-                  : " — add its tag back to link it to the strain page."}
-            </p>
-          )}
-          {prefillNotices.map((n, i) => (
-            <p key={i} className="text-xs text-warning mt-2">{n}</p>
-          ))}
-        </div>
+        <PageHeader
+          context={
+            <Link href="/forum" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              ← Back to Discussions
+            </Link>
+          }
+          title="Create New Discussion"
+          description="Start a new discussion in the community"
+        />
+        {(strainCtx || prefillNotices.length > 0) && (
+          <div className="-mt-3 mb-8 space-y-2">
+            {strainCtx && (
+              <p className="text-xs text-muted-foreground">
+                Asking about{" "}
+                <Link href={`/strains/${strainCtx.slug ?? strainCtx.id}`} className="text-primary hover:underline font-medium">
+                  {strainCtx.name}
+                </Link>
+                {tags.some((t) => t.toLowerCase() === strainCtx.name.toLowerCase())
+                  ? " — tagged, so it will appear on the strain page."
+                  : strainCtx.name.length > 30
+                    ? " — its name is too long for a tag; mention it in the title instead."
+                    : " — add its tag back to link it to the strain page."}
+              </p>
+            )}
+            {prefillNotices.map((n, i) => (
+              <p key={i} className="text-xs text-warning">{n}</p>
+            ))}
+          </div>
+        )}
 
         {/* Form */}
         <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
@@ -427,7 +434,7 @@ function NewThreadForm() {
               </button>
               <Link
                 href="/forum"
-                className="px-6 py-3 border border-border rounded-lg hover:bg-secondary transition-colors text-center"
+                className="px-6 py-3 border border-border rounded-full hover:bg-secondary transition-colors text-center"
               >
                 Cancel
               </Link>
@@ -436,8 +443,9 @@ function NewThreadForm() {
         </div>
 
         {/* Guidelines */}
-        <div className="mt-6 bg-secondary/50 rounded-xl p-4">
-          <h3 className="font-display font-semibold mb-2">Community Guidelines</h3>
+        <div className="tt-spotlight mt-6 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+          <span className="tt-eyebrow">Before you post</span>
+          <h3 className="font-display font-semibold mt-2 mb-2">Community Guidelines</h3>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Be respectful and constructive in your discussions</li>
             <li>• Search before posting to avoid duplicate threads</li>

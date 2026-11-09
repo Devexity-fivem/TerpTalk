@@ -154,7 +154,7 @@ export default function ModerationPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Moderator access required.</p>
         </div>
       </div>

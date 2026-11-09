@@ -7,6 +7,9 @@ import PageHeader from "@/components/ui/page-header"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { LiveRefresh } from "@/components/live-refresh"
+import EmptyState from "@/components/ui/empty-state"
+import TimeAgo from "@/components/ui/time-ago"
+import { Hash } from "@/lib/icons"
 
 export const dynamic = "force-dynamic"
 
@@ -74,38 +77,47 @@ export default async function TagThreadsPage({
           description={`${tag.threads.length} thread${tag.threads.length === 1 ? "" : "s"}`}
         />
 
-        <div className="space-y-4">
-          {tag.threads.map((tt) => {
-            const t = tt.thread
-            return (
-              <Link
-                key={t.id}
-                href={`/forum/thread/${t.slug}`}
-                className="tt-edge-card block bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-all"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="font-display font-semibold mb-1">{t.title}</h2>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                      {t.category.name} ·{" "}
-                      <ProfileCard
-                        username={t.author.profile?.username}
-                        name={t.author.profile?.username || t.author.name}
-                        avatarUrl={t.author.image}
-                        xp={t.author.profile?.xp}
-                        publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
-                        size="sm"
-                        linked={false}
-                      />{" "}
-                      · {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
-                    </p>
+        {tag.threads.length === 0 ? (
+          <EmptyState
+            icon={Hash}
+            title={`No threads tagged #${tag.name} yet`}
+            description="Start the first discussion with this tag."
+            action={{ label: "Create a Discussion", href: "/forum/new" }}
+          />
+        ) : (
+          <div className="space-y-4">
+            {tag.threads.map((tt) => {
+              const t = tt.thread
+              return (
+                <Link
+                  key={t.id}
+                  href={`/forum/thread/${t.slug}`}
+                  className="tt-edge-card tt-spotlight block bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-all"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-display font-semibold mb-1">{t.title}</h2>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                        {t.category.name} ·{" "}
+                        <ProfileCard
+                          username={t.author.profile?.username}
+                          name={t.author.profile?.username || t.author.name}
+                          avatarUrl={t.author.image}
+                          xp={t.author.profile?.xp}
+                          publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                          linked={false}
+                        />{" "}
+                        · {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
+                      </p>
+                    </div>
+                    <span className="text-sm text-muted-foreground shrink-0"><TimeAgo value={t.createdAt} /></span>
                   </div>
-                  <span className="text-sm text-muted-foreground shrink-0">{new Date(t.createdAt).toLocaleDateString()}</span>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
           <Link href={`/tags/${slug}`} className="inline-flex items-center gap-1 hover:text-foreground">

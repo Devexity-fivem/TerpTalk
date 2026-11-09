@@ -111,7 +111,7 @@ export default async function DealsPage() {
           <div className="flex flex-wrap gap-3 mb-8">
             {partners.filter((p) => !p.featured).map((p) => (
               <a key={p.id} href={`/go/${p.slug}?from=/deals`} rel="sponsored nofollow"
-                className="bg-card/80 border border-border/70 rounded-2xl px-4 py-2 text-sm hover:border-primary/50 transition-colors">
+                className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl px-4 py-2 text-sm hover:border-primary/50 transition-colors">
                 {p.name} {p.promoCode && <span className="text-primary font-semibold">· code {p.promoCode}</span>}
               </a>
             ))}

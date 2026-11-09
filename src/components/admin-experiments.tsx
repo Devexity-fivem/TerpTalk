@@ -82,7 +82,7 @@ export default function AdminExperiments() {
       {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">{error}</div>}
       {notice && <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm">{notice}</div>}
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 space-y-3">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 space-y-3">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">Record a change or experiment</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}
@@ -116,7 +116,7 @@ export default function AdminExperiments() {
         </button>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 divide-y divide-border/50">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 divide-y divide-border/50">
         {items.length === 0 && <p className="p-4 text-sm text-muted-foreground">Nothing recorded yet.</p>}
         {items.map((it) => (
           <article key={it.id} className="p-4">

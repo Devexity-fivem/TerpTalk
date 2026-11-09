@@ -61,7 +61,7 @@ export default function AdminSettingsPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
         </div>
       </div>
@@ -94,7 +94,7 @@ export default function AdminSettingsPage() {
         <div className="flex items-center gap-3 mb-6">
           <Settings className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Site Controls</h1>
+            <h1 className="text-2xl font-bold font-display">Site Controls</h1>
             <p className="text-muted-foreground text-sm">Enable or disable platform features</p>
           </div>
         </div>
@@ -102,8 +102,8 @@ export default function AdminSettingsPage() {
         {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm mb-4">{error}</div>}
         {notice && <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm mb-4">{notice}</div>}
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-          <div className="divide-y divide-border">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+          <div className="divide-y divide-border/50">
             {Object.entries(SETTING_LABELS).map(([key, { label, type, help }]) => (
               <div key={key} className="p-4 flex items-start justify-between gap-4">
                 <div className="min-w-0">

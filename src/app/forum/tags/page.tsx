@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
 import Link from "next/link"
 import PageHeader from "@/components/ui/page-header"
+import EmptyState from "@/components/ui/empty-state"
+import { Hash } from "@/lib/icons"
 import { buildMetadata } from "@/lib/seo"
 
 export const metadata = buildMetadata({
@@ -40,7 +42,12 @@ export default async function TagsPage() {
         />
 
         {tags.length === 0 ? (
-          <p className="text-muted-foreground">No tags yet.</p>
+          <EmptyState
+            icon={Hash}
+            title="No tags yet"
+            description="Tags appear here once discussions start using them — or add one in the composer when you post."
+            action={{ label: "Browse Discussions", href: "/forum" }}
+          />
         ) : (
           <div className="flex flex-wrap gap-3">
             {tags.map((tag) => (

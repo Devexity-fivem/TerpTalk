@@ -7,6 +7,7 @@ import { isStaff as isStaffRole } from "@/lib/roles"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { Shield, Users, MessageSquare, AlertCircle, Loader2, Send } from "@/lib/icons"
+import PageHeader from "@/components/ui/page-header"
 import Link from "next/link"
 
 const ROLES = [
@@ -116,9 +117,9 @@ export default function StaffApplyPage() {
       <main className="min-h-screen max-w-3xl mx-auto px-4 py-12">
         <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center">
           <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Sign in to apply</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Sign in to apply</h1>
           <p className="text-muted-foreground mb-6">You need an account to apply for a staff role.</p>
-          <Link href="/auth/signin?callbackUrl=%2Fstaff%2Fapply" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href="/auth/signin?callbackUrl=%2Fstaff%2Fapply" className="tt-cta inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90">
             Sign in
           </Link>
         </div>
@@ -131,7 +132,7 @@ export default function StaffApplyPage() {
       <main className="min-h-screen max-w-3xl mx-auto px-4 py-12">
         <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center">
           <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">You are already on staff</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">You are already on staff</h1>
           <p className="text-muted-foreground mb-6">Contact an administrator if you want to discuss a role change.</p>
           <Link href="/" className="text-primary hover:underline">Back to home</Link>
         </div>
@@ -141,10 +142,11 @@ export default function StaffApplyPage() {
 
   return (
     <main className="min-h-screen max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-2">Apply for staff</h1>
-      <p className="text-muted-foreground mb-8">
-        Pick a role below, read the responsibilities, and tell us why you would be a good fit.
-      </p>
+      <PageHeader
+        context={<span className="tt-eyebrow">Community team</span>}
+        title="Apply for staff"
+        description="Pick a role below, read the responsibilities, and tell us why you would be a good fit."
+      />
 
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
         {ROLES.map((r) => {
@@ -154,15 +156,15 @@ export default function StaffApplyPage() {
               key={r.id}
               onClick={() => setRole(r.id)}
               className={cn(
-                "text-left rounded-2xl border p-5 transition-colors",
+                "tt-spotlight text-left rounded-2xl border p-5 transition-colors",
                 role === r.id
                   ? "border-primary bg-primary/5"
-                  : "border-border bg-card hover:bg-secondary"
+                  : "border-border bg-card/80 hover:bg-secondary"
               )}
             >
               <div className="flex items-center gap-3 mb-3">
                 <Icon className="w-6 h-6 text-primary" />
-                <h2 className="text-xl font-semibold">{r.title}</h2>
+                <h2 className="text-xl font-semibold font-display">{r.title}</h2>
               </div>
               <p className="text-sm text-muted-foreground mb-4">{r.summary}</p>
               <h3 className="font-medium mb-1">Responsibilities</h3>
@@ -191,7 +193,7 @@ export default function StaffApplyPage() {
       <div className="tt-spotlight rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-semibold">Application for {selected.title}</h2>
+          <h2 className="text-xl font-semibold font-display">Application for {selected.title}</h2>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -246,7 +248,7 @@ export default function StaffApplyPage() {
           <button
             type="submit"
             disabled={sending}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="tt-cta inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50"
           >
             {sending ? (
               <Loader2 className="w-4 h-4 animate-spin" />

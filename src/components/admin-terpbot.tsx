@@ -29,8 +29,8 @@ interface TerpbotData {
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="bg-card/80 border border-border/70 rounded-2xl p-3">
-      <div className="text-lg font-bold leading-tight">{value}</div>
+    <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-3">
+      <div className="text-xl font-semibold font-display tabular-nums leading-tight">{value}</div>
       <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
     </div>
   )
@@ -40,7 +40,7 @@ function Breakdown({ title, rows }: { title: string; rows: Record<string, number
   const entries = Object.entries(rows).sort((a, b) => b[1] - a[1])
   if (!entries.length) return null
   return (
-    <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+    <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
       <h3 className="font-display text-sm font-semibold mb-2">{title}</h3>
       <div className="space-y-1">
         {entries.slice(0, 10).map(([k, v]) => (
@@ -88,7 +88,7 @@ export default function AdminTerpBot() {
       </div>
 
       {/* Health */}
-      <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+      <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
         <h3 className="font-display text-sm font-semibold mb-3">
           Health {failedChecks.length === 0
             ? <span className="text-primary font-normal">— all checks pass</span>

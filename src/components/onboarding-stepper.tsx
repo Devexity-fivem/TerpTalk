@@ -259,10 +259,10 @@ export default function OnboardingStepper({
     }`
 
   const btnPrimary =
-    "tt-cta min-h-12 px-6 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+    "tt-cta min-h-12 px-6 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
   const btnSecondary =
-    "min-h-12 px-6 rounded-lg border border-border font-semibold hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-  const btnGhost = "min-h-11 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground"
+    "min-h-12 px-6 rounded-full border border-border font-semibold hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+  const btnGhost = "min-h-11 px-4 rounded-full text-sm text-muted-foreground hover:text-foreground"
 
   return (
     // pb-28 clears the mobile bottom nav and floating chat/quick-post buttons.
@@ -525,7 +525,7 @@ export default function OnboardingStepper({
                 <button
                   onClick={() => setPhraseSaved(true)}
                   disabled={phraseSaved}
-                  className="mt-4 w-full min-h-11 bg-secondary rounded-xl hover:bg-secondary/80 text-sm font-medium disabled:opacity-60"
+                  className="mt-4 w-full min-h-11 bg-secondary rounded-full hover:bg-secondary/80 text-sm font-medium disabled:opacity-60"
                 >
                   {phraseSaved ? "Saved — continue below" : "I've saved my phrase"}
                 </button>

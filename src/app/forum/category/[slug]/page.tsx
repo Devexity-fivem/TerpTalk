@@ -14,6 +14,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getSession } from "@/lib/session"
 import CategoryFollowButton from "@/components/category-follow-button"
 import ProfileCard from "@/components/ui/profile-card"
+import TimeAgo from "@/components/ui/time-ago"
 import Tooltip from "@/components/ui/tooltip"
 
 export const dynamic = "force-dynamic"
@@ -205,7 +206,7 @@ export default async function CategoryPage({
                 <Link
                   key={thread.id}
                   href={`/forum/thread/${thread.slug}`}
-                  className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
+                  className="tt-edge-card tt-spotlight block p-4 hover:bg-secondary/50 transition-colors"
                 >
                   <div className="flex items-start gap-4">
                     <div className="flex-1">
@@ -253,7 +254,7 @@ export default async function CategoryPage({
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          {new Date(thread.createdAt).toLocaleDateString()}
+                          <TimeAgo value={thread.createdAt} />
                         </span>
                       </div>
                     </div>

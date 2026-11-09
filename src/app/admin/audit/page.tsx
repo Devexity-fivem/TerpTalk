@@ -76,7 +76,7 @@ export default function AdminAuditPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
         </div>
       </div>
@@ -89,12 +89,12 @@ export default function AdminAuditPage() {
         <div className="flex items-center gap-3 mb-6">
           <ScrollText className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Audit Log</h1>
+            <h1 className="text-2xl font-bold font-display">Audit Log</h1>
             <p className="text-muted-foreground text-sm">Moderation actions and security events</p>
           </div>
         </div>
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 mb-6 flex gap-3 flex-wrap">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -120,8 +120,8 @@ export default function AdminAuditPage() {
           <button onClick={load} className="px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">Search</button>
         </div>
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-          <div className="divide-y divide-border">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+          <div className="divide-y divide-border/50">
             {events.length === 0 && <p className="p-6 text-sm text-muted-foreground">No audit events found.</p>}
             {events.map((e) => (
               <div key={e.id} className="p-4 flex items-start justify-between gap-4 flex-wrap">
