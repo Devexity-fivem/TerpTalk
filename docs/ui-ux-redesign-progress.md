@@ -115,12 +115,12 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/chat`, `/messages` + ChatPanel/ChatDock | BROWSER VERIFIED | Day separators, jump pill, grouping, guest wall, mobile sheet `923ecf6`; 36/36 checks |
 | `/forum`, thread, category, `/questions`, `/tags` | BROWSER VERIFIED | Slice E `e998c84`: composer shell + shared empty states + tag/hashtag editorial pass; fixture thread+reply created via real `POST /api/forum/threads`+`/api/forum/posts` (`__redesign_ops_*`, cleaned); shots `forum-*-{1440,1024,390}` etc. |
 | `/forum/new` composer | BROWSER VERIFIED | Included above — notices conditional, CTA/cancel normalized; payload + gating unchanged |
-| `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
+| `/setups`, `/setups/[id]`, `/setups/new`, `/setups/[id]/edit` | BROWSER VERIFIED | Grouped equipment + at-a-glance `84142f7`; sectioned form `ba25c14`; shots `p3-*-setup*` (full+minimal fixtures, cleaned) |
 | `/strains`, `[slug]`, breeder, new, `/compare` | BROWSER VERIFIED | Editorial catalog, facet chips, related strains `9bede73`; 67/67 DOM asserts |
 | `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | BROWSER VERIFIED | Hero composition + deep-link tab fix + hub `341f798`; 24 shots `p3-*-prof-*`. SSR verified; hydration re-check after dev-server restart |
 | `/m/[id]`, `/stories/[username]` | BROWSER VERIFIED | Author rail + more-from + comment hierarchy `9bede73`; `p3-*-mom-*`, `p3-*-stories-*` |
-| `/progress`, `/achievements`, `/reputation`, `/leaderboard` | IN PROGRESS | Slice D: visual-only hierarchy |
-| `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/digest`, `/mydigest` | IN PROGRESS | Slice D: knowledge surfaces |
+| `/progress`, `/achievements`, `/reputation`, `/leaderboard` | BROWSER VERIFIED | Slice D `1252f43` — editorial headers/cards, zero logic changes; DOM audit 1440/1024/390 |
+| `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/compare`, `/digest`, `/mydigest` | BROWSER VERIFIED | Slice D `1252f43` — guide discovery + markdown article + knowledge surfaces; fixtures cleaned |
 | `/contest`, `/deals`, `/youtubers`, `/welcome` | BROWSER VERIFIED | Slice E `e998c84`: editorial headers, spotlight cards, shared empty states; voting/disclosures/rank gates + onboarding semantics unchanged; 3-viewport shots |
 | `/auth/signin`, `/auth/signup` | IMPLEMENTED | Field Journal eyebrow + taglines `b43df4f`; recover/welcome unchanged |
 | `/settings*` | BROWSER VERIFIED | Slice E `e998c84`: PageHeader + surface normalization; auth/API/toggle semantics unchanged; shots `settings*-{1440,1024,390}` |
