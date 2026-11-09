@@ -109,14 +109,14 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/` (landing + member home) | BROWSER VERIFIED | Rhythm `505d912`; Stream → unified editorial strip `1422e65` + mobile clip fix `fc3c773`; shots `p2-d/m-stream` |
 | `/feed` | IMPLEMENTED | Card density `505d912`; byline wrap `4d891b5`; shots p2/v2 feed |
 | `/diaries` | BROWSER VERIFIED | Filters + collapse `162f764`,`6b5c65a`; shots `p2-d/m-diaries*`; populated-card review pending seeded data |
-| `/diaries/[id]` | IN PROGRESS | Slice A: editorial polish + timeline/rail review |
-| `/diaries/new`, `/diaries/[id]/edit` | IN PROGRESS | Slice A: `diary-form.tsx` sectioned layout |
+| `/diaries/[id]` | IMPLEMENTED | Eyebrow + stage chip + balanced title `7d2d2c8`; populated browser check pending |
+| `/diaries/new`, `/diaries/[id]/edit` | IMPLEMENTED | `diary-form.tsx` sectioned (Identity/Env/Schedule/Visibility) `7d2d2c8`; browser check pending |
 | `/notifications` | IN PROGRESS | Slice C: scanability polish |
 | `/chat`, `/messages` + ChatPanel/ChatDock | IN PROGRESS | Slice C: room/DM polish, guest wall, mobile sheet |
 | `/forum`, thread, category, `/questions`, `/tags` | IN PROGRESS | Slice E: discussion hierarchy/density |
 | `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
 | `/strains`, `[slug]`, breeder, new, `/compare` | IN PROGRESS | Slice B1: editorial catalog |
-| `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | IN PROGRESS | Slice B2: profile composition + discovery |
+| `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | BROWSER VERIFIED | Hero composition + deep-link tab fix + hub `341f798`; 24 shots `p3-*-prof-*`. SSR verified; hydration re-check after dev-server restart |
 | `/m/[id]`, `/stories/[username]` | IN PROGRESS | Slice B1: intentional composition (+`4d891b5` byline) |
 | `/progress`, `/achievements`, `/reputation`, `/leaderboard` | IN PROGRESS | Slice D: visual-only hierarchy |
 | `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/digest`, `/mydigest` | IN PROGRESS | Slice D: knowledge surfaces |
