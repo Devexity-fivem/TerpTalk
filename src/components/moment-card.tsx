@@ -67,7 +67,7 @@ function Chips({ m }: { m: MomentCore }) {
 
 function Byline({ m, compact = false }: { m: MomentCore; compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2 min-w-0 text-sm">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 text-sm">
       <span className="flex min-w-0 items-center gap-1.5 font-semibold">
         <ProfileCard
           username={m.author.profile?.username}
