@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown, MessageSquare, Thermometer, Droplets, Gauge, Zap, Activity } from "@/lib/icons"
+import { Leaf, Calendar, Timer, User, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown, MessageSquare, Thermometer, Droplets, Gauge, Zap, Activity } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
+import EmptyState from "@/components/ui/empty-state"
 import Link from "next/link"
 import { getSession } from "@/lib/session"
 import UpdateForm from "@/components/update-form"
@@ -17,7 +18,7 @@ import StageTimeline from "@/components/stage-timeline"
 import ProfileCard from "@/components/ui/profile-card"
 import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
 import UpdateEditSection from "@/components/update-edit-form"
-import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations, latestFeedingNote } from "@/lib/diary-weeks"
+import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations, latestFeedingNote, STAGE_LABELS } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import UpdateSocialSection from "@/components/update-social-section"
@@ -476,6 +477,7 @@ export default async function DiaryPage({
               </a>
             )}
             <div className="flex-1 min-w-0 p-4 sm:p-5">
+              <div className="tt-eyebrow mb-2.5">Grow journal</div>
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {diary.featured && (
                   <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-warning">
@@ -483,10 +485,10 @@ export default async function DiaryPage({
                   </span>
                 )}
                 <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
-                  {diary.growType}
+                  {STAGE_LABELS[diary.stage] ?? diary.stage}
                 </span>
                 <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {diary.stage}
+                  {diary.growType}
                 </span>
                 {diary.harvested && (
                   <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success">
@@ -504,8 +506,10 @@ export default async function DiaryPage({
                   </span>
                 )}
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 tracking-tight">{diary.title}</h1>
-              <p className="text-sm text-muted-foreground mb-3">{diary.description}</p>
+              <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 tracking-tight text-balance wrap-break-word">{diary.title}</h1>
+              {diary.description && (
+                <p className="text-sm leading-relaxed text-muted-foreground mb-3 max-w-2xl whitespace-pre-wrap">{diary.description}</p>
+              )}
               {/* Grow identity — strain/setup links answer "what grow is
                   this?" before the member scrolls into the details. */}
               {(strainLink || diary.setup) && (
@@ -531,7 +535,7 @@ export default async function DiaryPage({
               )}
               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" />
+                  <User className="w-3.5 h-3.5" />
                   <ProfileCard
                     username={diary.author.profile?.username}
                     name={diary.author.profile?.username || diary.author.name}
@@ -554,7 +558,7 @@ export default async function DiaryPage({
                 </span>
                 <Tooltip content="Days since this grow started">
                   <span className="flex items-center gap-1 font-medium text-primary">
-                    <Calendar className="w-3.5 h-3.5" />
+                    <Timer className="w-3.5 h-3.5" />
                     Day {dayCount}
                   </span>
                 </Tooltip>
@@ -856,7 +860,7 @@ export default async function DiaryPage({
             {(harvestReport.stageDays.length > 0 || harvestReport.trainingTechniques.length > 0) && (
               <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                 {harvestReport.stageDays.map((s) => (
-                  <span key={s.stage}>{s.stage.toLowerCase()} {s.days}d</span>
+                  <span key={s.stage}>{(STAGE_LABELS[s.stage] ?? s.stage).toLowerCase()} {s.days}d</span>
                 ))}
                 {harvestReport.trainingTechniques.length > 0 && (
                   <span>training: {harvestReport.trainingTechniques.join(", ")}</span>
@@ -920,7 +924,7 @@ export default async function DiaryPage({
         )}
 
         {/* Grow Setup Info */}
-        <details className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-8 group">
+        <details className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 mt-4 mb-8 group">
           <summary className="p-4 text-sm font-semibold cursor-pointer flex items-center justify-between list-none marker:content-none">
             <span>Grow setup</span>
             <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
@@ -1022,7 +1026,7 @@ export default async function DiaryPage({
         {/* Timeline — grouped by grow week, with desktop context rail */}
         <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">
         <div className="space-y-4 min-w-0">
-          <div id="grow-timeline" className="flex justify-between items-center gap-2 scroll-mt-24">
+          <div id="grow-timeline" className="flex flex-wrap justify-between items-center gap-2 scroll-mt-24">
             <h2 className="font-display text-lg font-semibold">Grow Timeline</h2>
             {canEdit && (
               <div className="flex items-center gap-2">
@@ -1166,10 +1170,12 @@ export default async function DiaryPage({
           )}
 
           {weeksMerged.length === 0 ? (
-            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-8 text-center">
-              <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <h3 className="font-display text-base font-semibold mb-1">No updates yet</h3>
-              <p className="text-sm text-muted-foreground">Start documenting your grow journey with your first update!</p>
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
+              <EmptyState
+                icon={Leaf}
+                title="No updates yet"
+                description="Start documenting your grow journey with your first update!"
+              />
             </div>
           ) : (
             <div className="space-y-6">
@@ -1183,15 +1189,15 @@ export default async function DiaryPage({
                     <div className="flex items-center gap-2 mb-3 -mt-1">
                       <Sprout className="w-4 h-4 text-primary shrink-0" />
                       <span className="text-xs font-semibold text-primary uppercase tracking-wider">
-                        {week.stage.toLowerCase()} stage
+                        {(STAGE_LABELS[week.stage] ?? week.stage).toLowerCase()} stage
                       </span>
                       <span className="flex-1 border-t border-primary/25" />
                     </div>
                   )}
-                  <div className="flex items-center gap-3 mb-3">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
                     <h3 className="font-display text-sm font-semibold">
                       Week {week.week}
-                      <span className="text-muted-foreground font-normal"> — {week.stage.toLowerCase()}</span>
+                      <span className="text-muted-foreground font-normal"> — {(STAGE_LABELS[week.stage] ?? week.stage).toLowerCase()}</span>
                     </h3>
                     <span className="text-xs text-muted-foreground">
                       {week.dayStart === week.dayEnd
@@ -1411,7 +1417,7 @@ export default async function DiaryPage({
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Stage</dt>
-                  <dd className="text-xs">{diary.harvested ? "Harvested" : diary.stage}</dd>
+                  <dd className="text-xs">{diary.harvested ? "Harvested" : (STAGE_LABELS[diary.stage] ?? diary.stage)}</dd>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Updates</dt>
