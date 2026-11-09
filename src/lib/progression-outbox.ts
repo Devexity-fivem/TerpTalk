@@ -13,7 +13,7 @@ import {
   ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
 import { keyedInteractionActive, keyedAwardSpec } from "@/lib/interaction-state"
-import { runKeyedTx } from "@/lib/interaction-lifecycle"
+import { runKeyedTx, runKeyedTxRO } from "@/lib/interaction-lifecycle"
 import { logSecurityEvent } from "@/lib/security"
 
 type Db = Prisma.TransactionClient | typeof prisma
@@ -139,48 +139,23 @@ const MAX_ATTEMPTS = 10
 //
 // Returns "completed" | "incomplete". Throws propagate to drainXpOne's
 // catch → intent requeues PENDING (never completes on uncertain state).
+// Sentinel: the ReadCommitted fast path discovered a LIVE interaction —
+// ensure-award needs Serializable cap checks, so bail out (the tx rolls
+// back, releasing the key lock) and re-run under runKeyedTx, which
+// re-locks and re-reads live state before deciding.
+class NeedsSerializable extends Error {}
+
 async function reconcileKeyedIntent(
   id: string,
   row: { eventKey: string; reason: string; requestedBy: string | null }
 ): Promise<"completed" | "incomplete"> {
   const key = row.eventKey
-  return runKeyedTx(key, async (tx) => {
-    const active = await keyedInteractionActive(key, tx)
-    if (active === true) {
-      const spec = await keyedAwardSpec(key, tx)
-      if (spec) {
-        // Ensure-award: duplicate→no-op, reversed→reinstate, missing→
-        // first grant — all under the same caps/gates, in this tx.
-        await awardProgression(spec.userId, spec.type, spec.reason, {
-          key,
-          actorId: spec.actorId,
-          sourceType: spec.sourceType,
-          sourceId: spec.sourceId,
-          meta: spec.meta,
-          db: tx,
-        })
-      } else {
-        // Resolvable interaction but no derivable award spec — reinstate
-        // on the SAME tx client (never an independent transaction). If
-        // the grant can't be safely reinstated, throw so the intent
-        // stays recoverable with a clear error instead of completing
-        // against uncertain state.
-        const reinstate = await reinstateProgressionByKey(key, tx)
-        if (!reinstate.awarded && !reinstate.reinstated) {
-          throw new Error(
-            `keyed award underivable for active interaction: ${key} (${reinstate.skippedReason ?? "unknown"})`
-          )
-        }
-      }
-      await tx.pendingXpReversal.delete({ where: { id } })
-      return "completed" as const
-    }
-
-    // active === false | null → reverse inside this tx.
+  const reverseInTx = async (tx: Prisma.TransactionClient) => {
+    // active === false | null → reverse inside this tx. ReadCommitted is
+    // sufficient: every write is an atomic row operation guarded by the
+    // per-key advisory lock, and RC row-lock waits (never P2034 aborts)
+    // serialize cross-key same-user profile writes during drain bursts.
     await reverseProgressionByKey(key, row.reason, row.requestedBy ?? undefined, tx)
-
-    // Completion proof inside the same tx — a KEY intent completes once
-    // the keyed event is reversed/missing or has reversal descendants.
     const ev = await tx.progressionEvent.findUnique({
       where: { key },
       select: { id: true, reversedAt: true },
@@ -192,6 +167,53 @@ async function reconcileKeyedIntent(
     if (!complete) return "incomplete" as const
     await tx.pendingXpReversal.delete({ where: { id } })
     return "completed" as const
+  }
+  const ensureAwardInTx = async (tx: Prisma.TransactionClient) => {
+    const spec = await keyedAwardSpec(key, tx)
+    if (spec) {
+      // Ensure-award: duplicate→no-op, reversed→reinstate, missing→
+      // first grant — all under the same caps/gates, in this tx.
+      await awardProgression(spec.userId, spec.type, spec.reason, {
+        key,
+        actorId: spec.actorId,
+        sourceType: spec.sourceType,
+        sourceId: spec.sourceId,
+        meta: spec.meta,
+        db: tx,
+      })
+    } else {
+      // Resolvable interaction but no derivable award spec — reinstate
+      // on the SAME tx client (never an independent transaction). If
+      // the grant can't be safely reinstated, throw so the intent
+      // stays recoverable with a clear error instead of completing
+      // against uncertain state.
+      const reinstate = await reinstateProgressionByKey(key, tx)
+      if (!reinstate.awarded && !reinstate.reinstated) {
+        throw new Error(
+          `keyed award underivable for active interaction: ${key} (${reinstate.skippedReason ?? "unknown"})`
+        )
+      }
+    }
+    await tx.pendingXpReversal.delete({ where: { id } })
+    return "completed" as const
+  }
+
+  try {
+    return await runKeyedTxRO(key, async (tx) => {
+      const active = await keyedInteractionActive(key, tx)
+      if (active === true) throw new NeedsSerializable()
+      return reverseInTx(tx)
+    })
+  } catch (e) {
+    if (!(e instanceof NeedsSerializable)) throw e
+  }
+
+  // Live interaction → Serializable ensure-award. Re-locks and re-reads:
+  // state may have flipped during the RC attempt's rollback gap, and the
+  // locked read inside decides correctly either way.
+  return runKeyedTx(key, async (tx) => {
+    const active = await keyedInteractionActive(key, tx)
+    return active === true ? ensureAwardInTx(tx) : reverseInTx(tx)
   })
 }
 

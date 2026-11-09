@@ -63,10 +63,15 @@ export function runKeyedTxRO<T>(
   keys: string | string[],
   body: (tx: Prisma.TransactionClient) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    await lockKeys(tx, keys)
-    return body(tx)
-  })
+  // runTxWithRetry covers 40P01 deadlocks (P2034) — ReadCommitted can't
+  // produce serialization aborts, but row-lock cycles are still possible.
+  // Bodies are tx-rollback safe: a retried attempt re-runs from scratch.
+  return runTxWithRetry(() =>
+    prisma.$transaction(async (tx) => {
+      await lockKeys(tx, keys)
+      return body(tx)
+    })
+  )
 }
 
 // Content-scope lock key for a parent target — shared by every child
