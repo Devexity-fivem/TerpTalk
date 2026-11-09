@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, Calendar, Leaf, Bell, User, MessagesSquare, Plus, TrendingUp } from "@/lib/icons"
+import { Home, Calendar, Bell, User, MessagesSquare, Plus, TrendingUp } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { useChatPanel } from "@/components/chat-panel"
@@ -31,7 +31,6 @@ const ITEMS = {
   left: [
     { href: "/", label: "Home", icon: Home, exact: true },
     { href: "/feed", label: "Feed", icon: Calendar },
-    { href: "/diaries", label: "Diaries", icon: Leaf },
   ] as NavItem[],
   right: [
     { href: "/chat", label: "Chat", icon: MessagesSquare, chat: true },

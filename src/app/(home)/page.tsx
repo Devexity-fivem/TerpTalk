@@ -235,7 +235,7 @@ export default async function Home() {
       <LiveRefresh endpoint="/api/forum/updates" />
       <LiveRefresh endpoint="/api/diaries/updates" />
       {/* Hero — asymmetric split: pitch left, live canopy panel right */}
-      <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
+      <section className="relative overflow-hidden px-4 pb-10 pt-10 sm:px-6 lg:px-8 lg:pb-16 lg:pt-14">
         {/* Grow-light backdrop — blueprint grid + pine/iris/copper wash.
             No negative z: it would sink under the page's bg-background.
             The content grid is `relative` so it still paints on top. */}
@@ -340,7 +340,7 @@ export default async function Home() {
       </section>
 
       {/* Community Stream */}
-      <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
+      <section className="tt-reveal py-10 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
             <div>
@@ -355,7 +355,7 @@ export default async function Home() {
             </Link>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {/* Categories */}
             <div>
               <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
@@ -475,7 +475,7 @@ export default async function Home() {
       </section>
 
       {/* Explore Section */}
-      <section className="tt-reveal py-20 px-4 sm:px-6 lg:px-8">
+      <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <span className="tt-eyebrow">Find your corner</span>
@@ -507,7 +507,7 @@ export default async function Home() {
       </section>
 
       {/* Community Pulse */}
-      <section className="tt-reveal tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
+      <section className="tt-reveal tt-hairline-t py-10 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Trending */}
@@ -582,7 +582,7 @@ export default async function Home() {
 
       {/* Grower of the Week */}
       {growerOfWeek && (
-        <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+        <section className="tt-reveal py-10 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
           <div className="max-w-7xl mx-auto">
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
               <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
@@ -676,7 +676,7 @@ export default async function Home() {
       )}
 
       {/* CTA — a contained grow-light banner rather than a bare strip */}
-      <section className="tt-reveal px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      <section className="tt-reveal px-4 pb-14 pt-4 sm:px-6 lg:px-8">
         <div className="tt-holo-border relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
           <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
           <div className="pointer-events-none absolute inset-0">

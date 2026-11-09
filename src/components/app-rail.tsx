@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   Home, Calendar, TrendingUp, MessageCircle, HelpCircle, MessagesSquare, Mail, Bell,
-  Leaf, Tent, Dna, Stethoscope, BookOpen, Users, Medal, Tag, Search, Plus, User,
+  Leaf, Tent, Dna, Stethoscope, BookOpen, Users, Medal, Tag, Search, Plus, User, Trophy,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
@@ -39,6 +39,9 @@ const RAIL_SECTIONS: { label: string | null; items: RailItem[] }[] = [
     items: [
       { href: "/", label: "Home", icon: Home },
       { href: "/feed", label: "Feed", icon: Calendar },
+      // Chat is a first-class destination — not buried under Community.
+      // The panel opens in place; the live-activity dot rides the icon.
+      { href: "/chat", label: "Chat", icon: MessagesSquare, panel: true },
       { href: "/discover", label: "Discover", icon: TrendingUp },
     ],
   },
@@ -47,7 +50,7 @@ const RAIL_SECTIONS: { label: string | null; items: RailItem[] }[] = [
     items: [
       { href: "/forum", label: "Discussions", icon: MessageCircle },
       { href: "/questions", label: "Questions", icon: HelpCircle },
-      { href: "/chat", label: "Chat", icon: MessagesSquare, panel: true },
+      { href: "/contest", label: "Contest", icon: Trophy },
       { href: "/messages", label: "Messages", icon: Mail, auth: true },
       { href: "/notifications", label: "Notifications", icon: Bell, auth: true },
     ],
