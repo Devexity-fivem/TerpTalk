@@ -75,13 +75,13 @@ The app already has a real design foundation ("Verdant Ember" rebrand):
 | 2 | Foundation: palette/typography/density tokens, font swap | ✅ `b1b6ada` |
 | 3 | Shell: chat-first rail, consolidated mobile dock | ✅ `505d912` (top-bar drawer + ChatDock unchanged, still coherent) |
 | 4 | Home + Stream density | ✅ partial `505d912` — feed rows + landing rhythm tightened; landing stream still a 3-col teaser (structure TBD) |
-| 5 | Forums + thread detail | ⬜ inherits new tokens/serif headers only |
+| 5 | Forums + thread detail | ✅ `e998c84` — Slice E forum pass, API-fixture verified ×3 viewports |
 | 6 | Diaries, setups, strains | ⬜ inherits tokens only |
 | 7 | Profiles + moments | 🔸 byline wrap fix `4d891b5`; layouts unchanged |
 | 8 | Chat surface, messages, notifications | 🔸 discoverability fixed via nav; surfaces unchanged |
-| 9 | Progression, guides, plant-doctor, help, contest, settings, auth | ⬜ inherits tokens only |
-| 10 | Admin/mod consistency pass | ⬜ inherits tokens only |
-| 11 | Responsive + a11y sweep at 5 viewports | 🔸 1440/390 verified via screenshots; 3 sizes pending |
+| 9 | Progression, guides, plant-doctor, help, contest, settings, auth | 🔸 contest/settings/welcome done `e998c84`; progression+guides slices in flight |
+| 10 | Admin/mod consistency pass | ✅ `e998c84` — token-only normalization, all routes 200 ×3 viewports under staff sessions |
+| 11 | Responsive + a11y sweep at 5 viewports | 🔸 1440/1024/390 verified via screenshots (Slice E routes + earlier slices); a11y-specific sweep + remaining routes pending |
 | 12 | Verification gate + final report | 🔸 tsc/lint/test:fast(5/5)/build all PASS on `4d891b5` |
 
 ### Gates run so far (on `4d891b5`)
@@ -113,17 +113,18 @@ Legend: `NOT STARTED` → `IN PROGRESS` → `IMPLEMENTED` (code done) → `BROWS
 | `/diaries/new`, `/diaries/[id]/edit` | IMPLEMENTED | `diary-form.tsx` sectioned (Identity/Env/Schedule/Visibility) `7d2d2c8`; browser check pending |
 | `/notifications` | IN PROGRESS | Slice C: scanability polish |
 | `/chat`, `/messages` + ChatPanel/ChatDock | IN PROGRESS | Slice C: room/DM polish, guest wall, mobile sheet |
-| `/forum`, thread, category, `/questions`, `/tags` | IN PROGRESS | Slice E: discussion hierarchy/density |
+| `/forum`, thread, category, `/questions`, `/tags` | BROWSER VERIFIED | Slice E `e998c84`: composer shell + shared empty states + tag/hashtag editorial pass; fixture thread+reply created via real `POST /api/forum/threads`+`/api/forum/posts` (`__redesign_ops_*`, cleaned); shots `forum-*-{1440,1024,390}` etc. |
+| `/forum/new` composer | BROWSER VERIFIED | Included above — notices conditional, CTA/cancel normalized; payload + gating unchanged |
 | `/setups`, `/setups/[id]` | BROWSER VERIFIED | Grouped equipment, at-a-glance panel, spec chips `84142f7`; shots `p3-{1440,1024,390}-*` (populated full + minimal fixtures, cleaned up). new/edit forms NOT STARTED |
 | `/strains`, `[slug]`, breeder, new, `/compare` | IN PROGRESS | Slice B1: editorial catalog |
 | `/u/[username]`, `/profile`, `/growers`, `/profile/complete` | BROWSER VERIFIED | Hero composition + deep-link tab fix + hub `341f798`; 24 shots `p3-*-prof-*`. SSR verified; hydration re-check after dev-server restart |
 | `/m/[id]`, `/stories/[username]` | IN PROGRESS | Slice B1: intentional composition (+`4d891b5` byline) |
 | `/progress`, `/achievements`, `/reputation`, `/leaderboard` | IN PROGRESS | Slice D: visual-only hierarchy |
 | `/guides`, `[slug]`, `/plant-doctor`, `/help`, `/rules`, `/calculator`, `/digest`, `/mydigest` | IN PROGRESS | Slice D: knowledge surfaces |
-| `/contest`, `/deals`, `/youtubers`, `/welcome` | IN PROGRESS | Slice E |
+| `/contest`, `/deals`, `/youtubers`, `/welcome` | BROWSER VERIFIED | Slice E `e998c84`: editorial headers, spotlight cards, shared empty states; voting/disclosures/rank gates + onboarding semantics unchanged; 3-viewport shots |
 | `/auth/signin`, `/auth/signup` | IMPLEMENTED | Field Journal eyebrow + taglines `b43df4f`; recover/welcome unchanged |
-| `/settings*` | IN PROGRESS | Slice E: sections/forms |
-| `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | IN PROGRESS | Slice E: token-consistency pass only |
+| `/settings*` | BROWSER VERIFIED | Slice E `e998c84`: PageHeader + surface normalization; auth/API/toggle semantics unchanged; shots `settings*-{1440,1024,390}` |
+| `/admin/*`, `/moderation/*`, `/staff/*`, `/ops` | BROWSER VERIFIED | Slice E `e998c84`: token-consistency only (tt-spotlight/rounded-2xl/font-display/PageHeader); all 16 admin + 2 moderation routes HTTP 200 ×3 viewports under minted ADMINISTRATOR/MODERATOR JWT sessions; `/ops` redirect intact; no logic/API/gate changes |
 
 ## 6. Exact next continuation point
 0. **Gate blocker (2026-11-09):** the full `test:master` run failed 2 suites, both on time limits. `product-events`: the dev server wedged after a concurrent `npm run build`; standalone re-run on a fresh server PASS (100.4s). `diary`: 290/290 assertions PASS standalone, but it takes 804s against the 480s cap, with DB round-trip measured at ~200ms/query from this machine. The redesign diff touches no API/lib code. Re-run the full gate when DB latency is normal; do not raise the timeout. Never run `npm run build` against the dev server while tests run.
