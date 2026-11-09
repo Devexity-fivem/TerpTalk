@@ -8,10 +8,11 @@ import {
   reverseProgressionBySource,
   reverseProgressionByKey,
   reverseProgressionByActor,
-  reinstateProgressionByKey,
+  awardProgression,
   ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
-import { keyedInteractionActive } from "@/lib/interaction-state"
+import { keyedInteractionActive, keyedAwardSpec } from "@/lib/interaction-state"
+import { runKeyedTx } from "@/lib/interaction-lifecycle"
 import { logSecurityEvent } from "@/lib/security"
 
 type Db = Prisma.TransactionClient | typeof prisma
@@ -119,6 +120,73 @@ async function reversalComplete(row: {
 const CLAIM_STALE_MS = 10 * 60 * 1000
 const MAX_ATTEMPTS = 10
 
+// ─── Keyed intent reconcile (authoritative, lock-serialized) ────────
+// One Serializable transaction: take the per-key advisory lock, read
+// live interaction state through the SAME client, then ensure the
+// ledger matches it and delete the intent — all atomically. Because
+// every add/remove path for the key takes the same lock, the state we
+// read cannot change before we commit.
+//
+//   active === true  → ensure the grant is active (awardProgression on
+//                      the tx client handles duplicate / reinstate /
+//                      first-grant under the same caps and gates), then
+//                      complete the intent.
+//   active === false → reverse the keyed grant inside the tx, verify
+//                      completion, delete the intent.
+//   active === null  → unresolvable key type: legacy reverse-by-key,
+//                      completion-checked, intent deleted when done.
+//
+// Returns "completed" | "incomplete". Throws propagate to drainXpOne's
+// catch → intent requeues PENDING (never completes on uncertain state).
+async function reconcileKeyedIntent(
+  id: string,
+  row: { eventKey: string; reason: string; requestedBy: string | null }
+): Promise<"completed" | "incomplete"> {
+  const key = row.eventKey
+  return runKeyedTx(key, async (tx) => {
+    const active = await keyedInteractionActive(key, tx)
+    if (active === true) {
+      const spec = await keyedAwardSpec(key, tx)
+      if (spec) {
+        // Ensure-award: duplicate→no-op, reversed→reinstate, missing→
+        // first grant — all under the same caps/gates, in this tx.
+        await awardProgression(spec.userId, spec.type, spec.reason, {
+          key,
+          actorId: spec.actorId,
+          sourceType: spec.sourceType,
+          sourceId: spec.sourceId,
+          meta: spec.meta,
+          db: tx,
+        })
+      } else {
+        // Resolvable interaction but no derivable award spec — reinstate
+        // only (covers keys whose award shape we can't reconstruct).
+        const { reinstateProgressionByKey } = await import("@/lib/progression")
+        await reinstateProgressionByKey(key)
+      }
+      await tx.pendingXpReversal.delete({ where: { id } })
+      return "completed" as const
+    }
+
+    // active === false | null → reverse inside this tx.
+    await reverseProgressionByKey(key, row.reason, row.requestedBy ?? undefined, tx)
+
+    // Completion proof inside the same tx — a KEY intent completes once
+    // the keyed event is reversed/missing or has reversal descendants.
+    const ev = await tx.progressionEvent.findUnique({
+      where: { key },
+      select: { id: true, reversedAt: true },
+    })
+    const complete =
+      !ev ||
+      !!ev.reversedAt ||
+      (await tx.progressionEvent.count({ where: { reversalOfId: ev.id } })) > 0
+    if (!complete) return "incomplete" as const
+    await tx.pendingXpReversal.delete({ where: { id } })
+    return "completed" as const
+  })
+}
+
 export async function drainXpOne(id: string): Promise<boolean> {
   const staleBefore = new Date(Date.now() - CLAIM_STALE_MS)
   const claimed = await prisma.pendingXpReversal.updateMany({
@@ -140,31 +208,21 @@ export async function drainXpOne(id: string): Promise<boolean> {
     if (row.kind === "SOURCE" && row.sourceType && row.sourceId) {
       await reverseProgressionBySource(row.sourceType, row.sourceId, row.reason, row.requestedBy ?? undefined)
     } else if (row.kind === "KEY" && row.eventKey) {
-      // Live-state reconciliation — the only authoritative answer to
-      // "is this interaction still active?" is the interaction row
-      // itself, never a timestamp written by a possibly-stale award
-      // request. Resolvers cover the re-creatable social keys
-      // (follow / react / repost / comment); unknown key types keep the
-      // legacy reverse-by-key path.
-      const active = await keyedInteractionActive(row.eventKey)
-      if (active === true) {
-        // The interaction is live, so this reversal is stale. Completing
-        // the intent without reversing is correct — and
-        // reinstateProgressionByKey also heals a reversal that committed
-        // before a crash or re-creation (no-op when already active), so
-        // a live interaction can never be left without its grant.
-        await reinstateProgressionByKey(row.eventKey)
-        await prisma.pendingXpReversal.delete({ where: { id } }).catch(() => {})
-        return true
-      }
-      await reverseProgressionByKey(row.eventKey, row.reason, row.requestedBy ?? undefined)
-      // The interaction may have been re-created while the reversal was
-      // in flight — re-check LIVE state and repair if so. A resolver
-      // error propagates to the outer catch so the intent requeues
-      // rather than mutating on uncertain state.
-      if (active === false && (await keyedInteractionActive(row.eventKey)) === true) {
-        await reinstateProgressionByKey(row.eventKey)
-      }
+      // Authoritative reconcile: the per-key advisory lock serializes
+      // this drain against every add/remove transaction for the same
+      // logical interaction. Inside the lock we read live state through
+      // the same tx client that mutates the ledger, so the decision and
+      // its effect commit atomically — no add/remove can overtake the
+      // gap between check and write. Resolvers cover follow/react/
+      // repost/comment; unknown key types keep legacy reverse-by-key.
+      const outcome = await reconcileKeyedIntent(id, {
+        eventKey: row.eventKey,
+        reason: row.reason,
+        requestedBy: row.requestedBy,
+      })
+      if (outcome === "completed") return true
+      // "incomplete" — executor ran but the grant is still live with no
+      // reversal descendants; fall through to attempts/DEAD escalation.
     } else if (row.kind === "ACTOR" && row.actorId) {
       await reverseProgressionByActor(row.actorId, row.reason, { before: row.enqueuedAt, requestedBy: row.requestedBy ?? undefined })
     }

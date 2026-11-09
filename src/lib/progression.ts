@@ -101,6 +101,11 @@ export interface ProgressionAwardOptions {
   // is only used to clamp negative deltas (not applicable) and milestone
   // re-announces are independently key-guarded.
   subject?: SubjectUser | null
+  // Transaction client for lifecycle-serialized awards: when set, every
+  // read/write runs on this client and NO nested transaction is opened —
+  // the caller's transaction (which must hold the interaction-key
+  // advisory lock) owns atomicity. Post-commit notifications are skipped.
+  db?: Prisma.TransactionClient
 }
 
 export interface ProgressionAwardResult {
@@ -451,9 +456,10 @@ export async function awardProgression(
   opts: ProgressionAwardOptions = {}
 ): Promise<ProgressionAwardResult> {
   try {
+    const db = opts.db ?? prisma
     const subject =
       opts.subject ??
-      (await prisma.user.findUnique({
+      (await db.user.findUnique({
         where: { id: userId },
         select: {
           role: true,
@@ -471,7 +477,7 @@ export async function awardProgression(
 
     // Keyed idempotency + reinstate (staff-final reversals refuse re-grant).
     if (opts.key) {
-      const existing = await prisma.progressionEvent.findUnique({
+      const existing = await db.progressionEvent.findUnique({
         where: { key: opts.key },
         select: { id: true, userId: true, xp: true, standing: true, reversedAt: true, reversalFinal: true, mastery: true },
       })
@@ -483,10 +489,10 @@ export async function awardProgression(
         // state for resolvable keys (follow/react/repost/comment).
         // Unknown key types keep the unconditional reinstate path.
         if (opts.key) {
-          const active = await keyedInteractionActive(opts.key)
+          const active = await keyedInteractionActive(opts.key, db)
           if (active === false) return { awarded: false, skippedReason: "inactive" }
         }
-        return await reinstateProgressionEvent(existing, subject)
+        return await reinstateProgressionEvent(existing, subject, db)
       }
     }
 
@@ -504,9 +510,7 @@ export async function awardProgression(
     const capped = dailyCap !== undefined || weeklyCap !== undefined
     const needsSerialize = capped || (standing > 0 && !!actorNeeded(type, opts))
 
-    const runTx = () =>
-      prisma.$transaction(
-        async (tx) => {
+    const awardBody = async (tx: Prisma.TransactionClient) => {
           const dayStart = new Date()
           dayStart.setUTCHours(0, 0, 0, 0)
 
@@ -627,14 +631,28 @@ export async function awardProgression(
             }
           }
           return { oldXp, newXp, newRungs }
-        },
+    }
+
+    const runTx = () =>
+      prisma.$transaction(
+        awardBody,
         needsSerialize ? { isolationLevel: "Serializable" } : undefined
       )
 
-    const txResult = await runTxWithRetry(runTx)
+    // Caller-supplied transaction client (interaction lifecycle): run the
+    // award body directly on it — the caller's tx owns atomicity, holds
+    // the interaction-key advisory lock, and owns retry policy.
+    const txResult = opts.db
+      ? await awardBody(opts.db)
+      : await runTxWithRetry(runTx)
     if (txResult === "capped") return { awarded: false, skippedReason: "capped" }
     if (txResult === "withheld") return { awarded: false, skippedReason: "withheld" }
     const rungsCrossed = xp > 0 ? crossedRungs(txResult.oldXp, txResult.newXp) : []
+
+    // In-transaction awards commit with the caller's lifecycle tx —
+    // post-commit notifications are the caller's responsibility and are
+    // skipped here (social awards are xp:0, so no rungs exist anyway).
+    if (opts.db) return { awarded: true, newXp: txResult.newXp }
 
     // Member-facing milestone notifications — the celebration card reads
     // the kind/tier/unlocks metadata. Only rungs whose marker row was newly
@@ -1121,12 +1139,13 @@ export async function awardProgressionBatch(
 
 async function reinstateProgressionEvent(
   original: { id: string; userId: string; xp: number; standing: number; mastery: string | null },
-  subject: SubjectUser
+  subject: SubjectUser,
+  db: Prisma.TransactionClient | typeof prisma = prisma
 ): Promise<ProgressionAwardResult> {
   const oldXp = subject.profile?.xp ?? 0
   let restoredXp = 0
   let restoredStanding = 0
-  const result = await prisma.$transaction(async (tx) => {
+  const body = async (tx: Prisma.TransactionClient) => {
     const { count } = await tx.progressionEvent.updateMany({
       where: { id: original.id, reversedAt: { not: null }, reversalFinal: false },
       data: { reversedAt: null },
@@ -1182,7 +1201,12 @@ async function reinstateProgressionEvent(
       }
     }
     return { oldXp, newXp: oldXp + restoreXp }
-  })
+  }
+  // Caller-supplied tx client: run inline (no nested $transaction).
+  const result =
+    db === prisma
+      ? await prisma.$transaction(body)
+      : await body(db as Prisma.TransactionClient)
   if (result === "locked") return { awarded: false, skippedReason: "locked" }
   if (result === null) return { awarded: false, skippedReason: "duplicate" }
   return { awarded: true, reinstated: true, xp: restoredXp, standing: restoredStanding, oldXp, newXp: result.newXp }
@@ -1226,9 +1250,9 @@ export async function reverseProgressionEvent(
   eventId: string,
   reason: string,
   actorId?: string,
-  opts: { final?: boolean } = {}
+  opts: { final?: boolean; db?: Prisma.TransactionClient } = {}
 ): Promise<ProgressionReversalResult> {
-  const outcome = await prisma.$transaction(async (tx) => {
+  const body = async (tx: Prisma.TransactionClient) => {
     const original = await tx.progressionEvent.findUnique({
       where: { id: eventId },
       select: { id: true, userId: true, xp: true, standing: true, reversedAt: true, reversalFinal: true, type: true, sourceType: true, sourceId: true, mastery: true },
@@ -1284,17 +1308,26 @@ export async function reverseProgressionEvent(
       data: { standing: 0 },
     })
     return { newXp: Math.max(0, profile.xp), userId: original.userId }
-  })
+  }
+  const outcome =
+    opts.db !== undefined
+      ? await body(opts.db)
+      : await prisma.$transaction(body)
 
   if (outcome === null) return { reversed: false }
   return { reversed: true, eventId, newXp: outcome.newXp }
 }
 
-export async function reverseProgressionByKey(key: string, reason: string, actorId?: string): Promise<ProgressionReversalResult> {
-  const original = await prisma.progressionEvent.findUnique({ where: { key }, select: { id: true } })
+export async function reverseProgressionByKey(
+  key: string,
+  reason: string,
+  actorId?: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<ProgressionReversalResult> {
+  const original = await db.progressionEvent.findUnique({ where: { key }, select: { id: true } })
   if (!original) return { reversed: false }
   try {
-    return await reverseProgressionEvent(original.id, reason, actorId)
+    return await reverseProgressionEvent(original.id, reason, actorId, { db: db as Prisma.TransactionClient })
   } catch (err) {
     console.error("[progression] keyed reversal failed:", key, err)
     throw err

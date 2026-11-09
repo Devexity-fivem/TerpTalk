@@ -7,6 +7,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { commentLinkWhere } from "@/lib/notify"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { runKeyedTxRO } from "@/lib/interaction-lifecycle"
 
 type Ctx = { params: Promise<{ commentId: string }> }
 
@@ -44,7 +45,9 @@ export async function DELETE(request: Request, { params }: Ctx) {
     // this moment is going away. Self-comments never paid, so the key
     // can't exist for them.
     let reversalId: string | null = null
-    await prisma.$transaction(async (tx) => {
+    // Lock the shared (commenter, moment) key so this removal serializes
+    // against comment creation and the outbox reconcile for the same key.
+    await runKeyedTxRO(`comment:${c.authorId}:moment:${c.momentId}`, async (tx) => {
       await tx.momentComment.updateMany({ where: { id: commentId, deleted: false }, data: { deleted: true } })
       await tx.notification.deleteMany({ where: commentLinkWhere(commentId) })
       if (c.authorId !== c.moment.authorId) {

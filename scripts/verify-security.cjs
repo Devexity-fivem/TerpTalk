@@ -117,6 +117,11 @@ const apiFiles = () => {
     // queries. Parameterized tagged template; the update-id and blocked-id
     // arrays are bound ANY($n::text[]) params, the window size a bound int.
     path.join("src", "lib", "update-social.ts"),
+    // Interaction lifecycle: pg_advisory_xact_lock(hashtext(ns),
+    // hashtext(key)) — parameterized tagged template; the logical key is
+    // a bound parameter, never interpolated. Transaction-scoped lock
+    // serializing add/remove/drain for each social interaction key.
+    path.join("src", "lib", "interaction-state.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;

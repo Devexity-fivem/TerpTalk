@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
 import { progressionRateLimit, awardProgression } from "@/lib/progression"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { runKeyedTx, runKeyedTxRO } from "@/lib/interaction-lifecycle"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
         // strand standing on a removed reaction; the outbox drain runs
         // after commit and is idempotent on the shared key.
         let reversalId: string | null = null
-        await prisma.$transaction(async (tx) => {
+        await runKeyedTxRO(socialKey, async (tx) => {
           await tx.reaction.delete({ where: { id: existingReaction.id } })
           reversalId = await enqueueXpReversal(tx, {
             kind: "KEY", eventKey: socialKey,
@@ -218,23 +218,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
-    // Create new reaction — a double-click race can hit the unique
-    // constraint; read the winner's row instead of 500ing.
+    // Authoritative add: the Reaction row and its progression grant
+    // commit in ONE Serializable transaction under the per-key advisory
+    // lock — serialized against remove/drain for this interaction.
+    // The lock also absorbs the double-click race: a concurrent create
+    // for the same key waits, then sees the committed row.
     let reaction
-    try {
-      reaction = await prisma.reaction.create({
-        data: { type, userId: session.user.id, ...target },
+    await runKeyedTx(socialKey, async (tx) => {
+      const dup = await tx.reaction.findFirst({
+        where: { userId: session.user.id, ...target },
       })
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        reaction = await prisma.reaction.findFirst({
-          where: { userId: session.user.id, ...target },
+      reaction = dup ?? (await tx.reaction.create({
+        data: { type, userId: session.user.id, ...target },
+      }))
+      // Standing to the recipient — actor is the reactor, keyed so
+      // toggle-off reverses cleanly. Runs on tx: atomic with the row.
+      if (targetAuthorId && targetAuthorId !== session.user.id) {
+        await awardProgression(targetAuthorId, socialType, "Someone reacted to your content", {
+          actorId: session.user.id,
+          key: socialKey,
+          ...socialSource,
+          meta: { reactionType: type },
+          db: tx,
         })
-        if (!reaction) throw e
-      } else {
-        throw e
       }
-    }
+    })
 
     // Product event: a newly persisted reaction on a Moment — after the
     // row exists, never for rejected targets or removals.
@@ -265,17 +273,6 @@ export async function POST(request: Request) {
         actorId: session.user.id,
         groupKey: `REACTION:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : hasMomentId ? `moment:${momentId}` : `update:${diaryUpdateId}`}`,
         dedupeMs: 24 * 60 * 60 * 1000,
-      })
-    }
-
-    // Standing to the recipient — actor is the reactor, keyed so
-    // toggle-off reverses cleanly. Caps/peer-gates apply inside the award.
-    if (targetAuthorId && targetAuthorId !== session.user.id) {
-      await awardProgression(targetAuthorId, socialType, "Someone reacted to your content", {
-        actorId: session.user.id,
-        key: socialKey,
-        ...socialSource,
-        meta: { reactionType: type },
       })
     }
 

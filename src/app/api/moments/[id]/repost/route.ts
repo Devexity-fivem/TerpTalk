@@ -9,6 +9,7 @@ import { notify } from "@/lib/notify"
 import { canViewMoment, momentPath } from "@/lib/moments"
 import { awardProgression } from "@/lib/progression"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { lockInteractionKey } from "@/lib/interaction-state"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -50,7 +51,11 @@ export async function POST(request: Request, { params }: Ctx) {
     // Durable reversal intent for the toggle-off path — committed inside
     // the same transaction as the delete.
     let reversalId: string | null = null
+    const repostKey = `repost:${userId}:moment:${id}`
     const result = await prisma.$transaction(async (tx) => {
+      // Shared per-key lock — serializes this toggle against comment/
+      // follow/react transitions and the outbox reconcile for repostKey.
+      await lockInteractionKey(tx, repostKey)
       await lockUserRow(tx, userId)
       const existing = await tx.moment.findFirst({
         where: { authorId: userId, repostOfId: id, content: "", deleted: false, kind: "POST" },
@@ -69,7 +74,7 @@ export async function POST(request: Request, { params }: Ctx) {
           })
           if (remaining === 0) {
             reversalId = await enqueueXpReversal(tx, {
-              kind: "KEY", eventKey: `repost:${userId}:moment:${id}`,
+              kind: "KEY", eventKey: repostKey,
               reason: "Repost removed", requestedBy: userId,
             })
           }
@@ -77,19 +82,22 @@ export async function POST(request: Request, { params }: Ctx) {
         return { reposted: false as const }
       }
       await tx.moment.create({ data: { kind: "POST", content: "", visibility: "PUBLIC", authorId: userId, repostOfId: id } })
+      // V3: pure repost — standing to the original author, committed
+      // atomically with the repost row under the key lock.
+      if (target.authorId !== userId) {
+        await awardProgression(target.authorId, "REPOST_RECEIVED", "Someone reposted your post", {
+          actorId: userId,
+          key: repostKey,
+          sourceType: "MOMENT", sourceId: id,
+          db: tx,
+        })
+      }
       return { reposted: true as const }
     })
     if (reversalId) await drainXpOne(reversalId).catch(() => false)
     const count = await prisma.moment.count({ where: { repostOfId: id, deleted: false } })
 
-    // V3: pure repost — standing to the original author, keyed so an
-    // un-repost path (if added later) reverses by the same token.
     if (result.reposted && target.authorId !== userId) {
-      await awardProgression(target.authorId, "REPOST_RECEIVED", "Someone reposted your post", {
-        actorId: userId,
-        key: `repost:${userId}:moment:${id}`,
-        sourceType: "MOMENT", sourceId: id,
-      })
       await notify({
         userId: target.authorId,
         type: "REACTION",

@@ -8,6 +8,7 @@ import {
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
+import { runKeyedTx } from "@/lib/interaction-lifecycle"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, notifyMany } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
@@ -84,9 +85,26 @@ export async function POST(request: Request, { params }: Ctx) {
     const linkBlock = await enforceLinkTrust(content, userId, request, "moments/comments")
     if (linkBlock) return linkBlock
 
-    const comment = await prisma.momentComment.create({
-      data: { momentId: m.id, authorId: userId, content: content.trim() },
-      select: { id: true, content: true, createdAt: true, authorId: true, author: { select: publicUserSelect } },
+    // Authoritative add: the comment row and its COMMENT_RECEIVED grant
+    // commit in ONE Serializable transaction under the per-(commenter,
+    // moment) key lock — serialized against last-comment removal and
+    // the outbox reconcile. Keyed per commenter+moment (not per comment)
+    // matching the last-live-engagement reversal semantics.
+    const commentKey = `comment:${userId}:moment:${m.id}`
+    const comment = await runKeyedTx(commentKey, async (tx) => {
+      const row = await tx.momentComment.create({
+        data: { momentId: m.id, authorId: userId, content: content.trim() },
+        select: { id: true, content: true, createdAt: true, authorId: true, author: { select: publicUserSelect } },
+      })
+      if (m.authorId !== userId) {
+        await awardProgression(m.authorId, "COMMENT_RECEIVED", "Someone commented on your post", {
+          actorId: userId,
+          key: commentKey,
+          sourceType: "MOMENT", sourceId: m.id,
+          db: tx,
+        })
+      }
+      return row
     })
 
     // Product event: one per persisted comment — references the resolved
@@ -104,12 +122,6 @@ export async function POST(request: Request, { params }: Ctx) {
     const audience = m.visibility === "FOLLOWERS" ? followersAudience(m.authorId) : null
 
     if (m.authorId !== userId) {
-      // V3: engagement pays the author — keyed per commenter per moment.
-      await awardProgression(m.authorId, "COMMENT_RECEIVED", "Someone commented on your post", {
-        actorId: userId,
-        key: `comment:${userId}:moment:${m.id}`,
-        sourceType: "MOMENT", sourceId: m.id,
-      })
       await notify({
         userId: m.authorId,
         type: "COMMENT",

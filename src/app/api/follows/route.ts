@@ -9,6 +9,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
 import { awardProgression } from "@/lib/progression"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { runKeyedTx, runKeyedTxRO } from "@/lib/interaction-lifecycle"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { eventSource } from "@/lib/event-sources"
@@ -63,33 +64,53 @@ export async function POST(request: Request) {
 
       if (await blockExistsBetween(session.user.id, userId)) return forbidden()
 
+      const followKey = `follow:${session.user.id}:user:${userId}`
       const existing = await prisma.follow.findUnique({
         where: { followerId_followingId: { followerId: session.user.id, followingId: userId } },
       })
       if (existing) {
         // V3: unfollow claws the standing back — the keyed reversal is
         // idempotent so a follow that never paid is a no-op. Delete and
-        // durable reversal intent commit in ONE transaction; the drain
-        // runs after commit.
+        // durable reversal intent commit in ONE transaction under the
+        // shared per-key lock, serialized against every add/drain for
+        // this interaction; the drain runs after commit.
         let reversalId: string | null = null
-        await prisma.$transaction(async (tx) => {
+        await runKeyedTxRO(followKey, async (tx) => {
           await tx.follow.delete({ where: { id: existing.id } })
           reversalId = await enqueueXpReversal(tx, {
-            kind: "KEY", eventKey: `follow:${session.user.id}:user:${userId}`,
+            kind: "KEY", eventKey: followKey,
             reason: "Unfollowed", requestedBy: session.user.id,
           })
         })
         if (reversalId) await drainXpOne(reversalId).catch(() => false)
         return NextResponse.json({ following: false })
       }
-      try {
-        await prisma.follow.create({
-          data: { followerId: session.user.id, followingId: userId },
+      // Authoritative add: the Follow row and its progression grant
+      // commit in ONE Serializable transaction under the per-key
+      // advisory lock — a removal cannot commit a newer state while
+      // this is in flight, and vice versa. Product events/notify stay
+      // post-commit.
+      await runKeyedTx(followKey, async (tx) => {
+        const dup = await tx.follow.findUnique({
+          where: { followerId_followingId: { followerId: session.user.id, followingId: userId } },
+          select: { id: true },
         })
-      } catch (e) {
-        // Double-click race: the parallel request already created it.
-        if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
-      }
+        if (!dup) {
+          await tx.follow.create({
+            data: { followerId: session.user.id, followingId: userId },
+          })
+        }
+        // V3 social economy: a follow is the strongest community signal —
+        // standing to the *followed* member, peer-gated + capped like
+        // every judgment award. Runs on tx so it commits atomically.
+        await awardProgression(userId, "FOLLOWER_GAINED", "A grower followed you", {
+          actorId: session.user.id,
+          key: followKey,
+          sourceType: "USER",
+          sourceId: userId,
+          db: tx,
+        })
+      })
       // Product events are best-effort and never block the response.
       // FIRST_FOLLOW is an unconditional keyed upsert: the first
       // observed transition wins the key, later transitions no-op —
@@ -117,15 +138,6 @@ export async function POST(request: Request) {
         actorId: session.user.id,
         groupKey: `FOLLOW:${session.user.id}:${userId}`,
         dedupeMs: 24 * 60 * 60 * 1000,
-      })
-      // V3 social economy: a follow is the strongest community signal —
-      // standing to the *followed* member, peer-gated + capped like every
-      // judgment award.
-      await awardProgression(userId, "FOLLOWER_GAINED", "A grower followed you", {
-        actorId: session.user.id,
-        key: `follow:${session.user.id}:user:${userId}`,
-        sourceType: "USER",
-        sourceId: userId,
       })
       return NextResponse.json({ following: true })
     }
