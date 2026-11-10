@@ -527,6 +527,7 @@ async function main() {
         const announcements = async (needle) =>
           prisma.chatMessage.findMany({
             where: { roomId: general.id, authorId: botId, createdAt: { gte: since }, content: { contains: needle } },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: { id: true, content: true },
           })
         const waitFor = async (needle, minCount = 1, tries = 12) => {
