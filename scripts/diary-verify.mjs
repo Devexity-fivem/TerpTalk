@@ -39,10 +39,12 @@ async function getSitemapBodies() {
 const main = async () => {
   // Sweep any orphaned fixtures from prior interrupted runs so stale
   // `__dv_*` rows cannot collide with this run's assertions.
-  await prisma.user.deleteMany({ where: { name: { startsWith: "__verify_" } } }).catch(() => {})
-  await prisma.growDiary.deleteMany({ where: { title: { startsWith: "__dv_" } } }).catch(() => {})
-  await prisma.strain.deleteMany({ where: { name: { startsWith: "__dv_" } } }).catch(() => {})
-  await prisma.thread.deleteMany({ where: { title: { startsWith: "__dv_" } } }).catch(() => {})
+  await Promise.all([
+    prisma.user.deleteMany({ where: { name: { startsWith: "__verify_" } } }),
+    prisma.growDiary.deleteMany({ where: { title: { startsWith: "__dv_" } } }),
+    prisma.strain.deleteMany({ where: { name: { startsWith: "__dv_" } } }),
+    prisma.thread.deleteMany({ where: { title: { startsWith: "__dv_" } } }),
+  ]).catch(() => {})
 
   // Owner is backdated + XP-seeded so the self-vote test reaches the
   // self-vote check rather than being stopped at the voter trust gate.
@@ -71,10 +73,16 @@ const main = async () => {
     await prisma.user.update({ where: { id: banned.id }, data: { banned: true } })
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
 
-    const { cookie: ownerCookie } = await login(owner.username, owner.password)
-    const { cookie: viewerCookie } = await login(viewer.username, viewer.password)
-    const { cookie: bannedCookie } = await login(banned.username, banned.password)
-    const { cookie: voterCookie } = await login(voter.username, voter.password)
+    const [ownerL, viewerL, bannedL, voterL] = await Promise.all([
+      login(owner.username, owner.password),
+      login(viewer.username, viewer.password),
+      login(banned.username, banned.password),
+      login(voter.username, voter.password),
+    ])
+    const { cookie: ownerCookie } = ownerL
+    const { cookie: viewerCookie } = viewerL
+    const { cookie: bannedCookie } = bannedL
+    const { cookie: voterCookie } = voterL
     ;[ownerCookie, viewerCookie, bannedCookie, voterCookie].every(Boolean)
       ? pass("logins work")
       : fail("logins", "missing session cookie")
@@ -662,30 +670,35 @@ const main = async () => {
       PRIVATE:  { owner: 200, other: 404, blocked: 404, guest: 404 },
     }
     const pages = {}
-    for (const [vis, d] of [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]]) {
-      for (const [who, ck] of actors) {
-        const p = await getHtml(`/diaries/${d.id}`, ck)
-        p.status === expect[vis][who]
-          ? pass(`${vis} diary → ${who} gets ${expect[vis][who]}`)
-          : fail(`${vis} diary ${who}`, p.status)
-        if (who === "guest") pages[vis] = p.html
-        if (who === "owner") pages[`${vis}_owner`] = p.html
-      }
+    const pageMatrix = await Promise.all(
+      [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]].flatMap(([vis, d]) =>
+        actors.map(async ([who, ck]) => ({
+          vis, who,
+          p: await getHtml(`/diaries/${d.id}`, ck),
+        })))
+    )
+    for (const { vis, who, p } of pageMatrix) {
+      p.status === expect[vis][who]
+        ? pass(`${vis} diary → ${who} gets ${expect[vis][who]}`)
+        : fail(`${vis} diary ${who}`, p.status)
+      if (who === "guest") pages[vis] = p.html
+      if (who === "owner") pages[`${vis}_owner`] = p.html
     }
 
     // LiveRefresh tickle — the per-diary activity endpoint must apply the
     // exact same visibility matrix as the page (PRIVATE 404s for all but
     // the owner) so pollers can't probe existence.
-    for (const [vis, d] of [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]]) {
-      for (const [who, ck] of actors) {
-        const a = await callApi(`/api/diaries/${d.id}/activity`, { cookie: ck })
-        const body = a.data || {}
-        const okStatus = a.status === expect[vis][who]
-        const okShape = a.status !== 200 || typeof body.fingerprint === "string"
-        okStatus && okShape
-          ? pass(`live ${vis} diary activity → ${who} ${expect[vis][who]}`)
-          : fail(`live ${vis} diary activity ${who}`, { status: a.status, body })
-      }
+    const actMatrix = await Promise.all(
+      [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]].flatMap(([vis, d]) =>
+        actors.map(async ([who, ck]) => ({ vis, who, a: await callApi(`/api/diaries/${d.id}/activity`, { cookie: ck }) })))
+    )
+    for (const { vis, who, a } of actMatrix) {
+      const body = a.data || {}
+      const okStatus = a.status === expect[vis][who]
+      const okShape = a.status !== 200 || typeof body.fingerprint === "string"
+      okStatus && okShape
+        ? pass(`live ${vis} diary activity → ${who} ${expect[vis][who]}`)
+        : fail(`live ${vis} diary activity ${who}`, { status: a.status, body })
     }
     // ── Media proxy authorization ──────────────────────────────────────
     // Restricted-class images serialize as /api/media/[kind]/[id]; the
@@ -718,20 +731,21 @@ const main = async () => {
       pub: { owner: 200, other: 200, blocked: 200, guest: 200 },
       prv: { owner: 200, other: 404, blocked: 404, guest: 404 },
     }
-    for (const [label, img] of [["pub", pubImg], ["prv", prvImg]]) {
-      for (const [who, ck] of actors) {
-        const m = await getMedia("diary", img.id, ck)
-        m.status === mediaExpect[label][who]
-          ? pass(`media ${label} → ${who} ${mediaExpect[label][who]}`)
-          : fail(`media ${label} ${who}`, m.status)
-        if (m.status === 200 && (!/private/.test(m.cache) || !/no-store/.test(m.cache) || !/cookie/i.test(m.vary) || !/^image\//.test(m.type))) {
-          fail(`media ${label} ${who} headers`, { cache: m.cache, vary: m.vary, type: m.type })
-        }
-        // Denials are uniform: same status AND same empty body, so the
-        // endpoint can't distinguish "exists but private" from "missing".
-        if (m.status === 404 && m.bodyLen !== 0) {
-          fail(`media ${label} ${who} denial leaks a body`, m.bodyLen)
-        }
+    const mediaMatrix = await Promise.all(
+      [["pub", pubImg], ["prv", prvImg]].flatMap(([label, img]) =>
+        actors.map(async ([who, ck]) => ({ label, who, m: await getMedia("diary", img.id, ck) })))
+    )
+    for (const { label, who, m } of mediaMatrix) {
+      m.status === mediaExpect[label][who]
+        ? pass(`media ${label} → ${who} ${mediaExpect[label][who]}`)
+        : fail(`media ${label} ${who}`, m.status)
+      if (m.status === 200 && (!/private/.test(m.cache) || !/no-store/.test(m.cache) || !/cookie/i.test(m.vary) || !/^image\//.test(m.type))) {
+        fail(`media ${label} ${who} headers`, { cache: m.cache, vary: m.vary, type: m.type })
+      }
+      // Denials are uniform: same status AND same empty body, so the
+      // endpoint can't distinguish "exists but private" from "missing".
+      if (m.status === 404 && m.bodyLen !== 0) {
+        fail(`media ${label} ${who} denial leaks a body`, m.bodyLen)
       }
     }
 
@@ -1548,8 +1562,11 @@ const main = async () => {
 
       // Member-only + auth surfaces carry noindex — the only paths where
       // a crawler can ever see these tags are the pages themselves.
-      for (const [path, label] of [["/auth/signin", "signin"], ["/auth/signup", "signup"], ["/mydigest", "mydigest"], ["/feed", "feed"], ["/search", "search"]]) {
-        const p = await getHtml(path)
+      const noindexPages = await Promise.all(
+        [["/auth/signin", "signin"], ["/auth/signup", "signup"], ["/mydigest", "mydigest"], ["/feed", "feed"], ["/search", "search"]]
+          .map(async ([path, label]) => ({ label, p: await getHtml(path) }))
+      )
+      for (const { label, p } of noindexPages) {
         p.html.includes('name="robots" content="noindex')
           ? pass(`${label} is noindex`)
           : fail(`${label} noindex`, { s: p.status, tag: p.html.match(/name="robots"[^>]*>/)?.[0] ?? "none" })
@@ -1802,8 +1819,12 @@ const main = async () => {
     r.status === 200 && (r.data?.experiments || []).length === 1
       ? pass("owner lists experiments on PRIVATE diary")
       : fail("owner private experiments", { s: r.status, d: r.data })
-    for (const [who, ck] of [["viewer", viewerCookie], ["guest", undefined]]) {
-      r = await callApi(`/api/diaries/${prvExpD.id}/experiments`, { cookie: ck })
+    const expVisibility = await Promise.all(
+      [["viewer", viewerCookie], ["guest", undefined]].map(async ([who, ck]) => ({
+        who, r: await callApi(`/api/diaries/${prvExpD.id}/experiments`, { cookie: ck }),
+      }))
+    )
+    for (const { who, r } of expVisibility) {
       r.status === 404 ? pass(`PRIVATE diary experiments invisible to ${who}`) : fail(`private experiments ${who}`, r.status)
     }
 
@@ -1834,12 +1855,12 @@ const main = async () => {
       diaryIds.push(d.id)
       return d
     }
-    for (const authorId of [owner.id, voter.id, viewer.id]) {
+    await Promise.all([owner.id, voter.id, viewer.id].map(async (authorId) => {
       const d = await evMk(authorId)
       await prisma.growExperiment.create({
         data: { diaryId: d.id, authorId, title: M("evexp"), change: "x", category: "TRAINING", status: "COMPLETED", outcome: "WORKED" },
       })
-    }
+    }))
     // A private grow's experiment on the same strain — must not count.
     const prvEv = await evMk(owner.id, { visibility: "PRIVATE" })
     await prisma.growExperiment.create({
@@ -2026,11 +2047,11 @@ const main = async () => {
     fail("suite error", String(e))
   } finally {
     if (strainId) await prisma.strain.delete({ where: { id: strainId } }).catch(() => {})
-    for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
-    for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
-    for (const id of diaryIds) await prisma.growDiary.delete({ where: { id } }).catch(() => {})
-    for (const id of threadIds) await prisma.thread.delete({ where: { id } }).catch(() => {})
-    for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+    await Promise.all(strainIds.map((id) => prisma.strain.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(setupIds.map((id) => prisma.growSetup.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(diaryIds.map((id) => prisma.growDiary.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(threadIds.map((id) => prisma.thread.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(users.map((u) => prisma.user.delete({ where: { id: u.id } }).catch(() => {})))
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } }).catch(() => {})
     await prisma.$disconnect()
   }

@@ -72,13 +72,18 @@ const main = async () => {
   try {
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
 
-    const { cookie: aC } = await login(a.username, a.password)
-    const { cookie: bC } = await login(b.username, b.password)
-    const { cookie: cC } = await login(c.username, c.password)
-    const { cookie: modC } = await login(mod.username, mod.password)
-    const { cookie: adminC } = await login(admin.username, admin.password)
-    const { cookie: sessC } = await login(sess.username, sess.password)
-    const { cookie: delC } = await login(del.username, del.password)
+    const [aL, bL, cL, modL, adminL, sessL, delL] = await Promise.all([
+      login(a.username, a.password), login(b.username, b.password), login(c.username, c.password),
+      login(mod.username, mod.password), login(admin.username, admin.password),
+      login(sess.username, sess.password), login(del.username, del.password),
+    ])
+    const { cookie: aC } = aL
+    const { cookie: bC } = bL
+    const { cookie: cC } = cL
+    const { cookie: modC } = modL
+    const { cookie: adminC } = adminL
+    const { cookie: sessC } = sessL
+    const { cookie: delC } = delL
     ;[aC, bC, cC, modC, adminC, sessC, delC].every(Boolean)
       ? pass("setup: all fixture logins work")
       : fail("logins", "missing session cookie")
@@ -108,7 +113,7 @@ const main = async () => {
     // the 11th attempt fails even with the right password.
     const rlUser = await createUser("rlu")
     users.push(rlUser)
-    for (let i = 0; i < 10; i++) await tryLogin(rlUser.username, "wrong-" + i)
+    await Promise.all(Array.from({ length: 10 }, (_, i) => tryLogin(rlUser.username, `wrong-${i}`)))
     const afterLimit = await tryLogin(rlUser.username, rlUser.password)
     const otherStillOk = await tryLogin(b.username, b.password)
     !afterLimit.sessionCookie && otherStillOk.sessionCookie
@@ -702,13 +707,14 @@ const main = async () => {
       PRIVATE: { owner: 200, member: 404, blocked: 404, guest: 404 },
     }
     const actors = [["owner", aC], ["member", bC], ["blocked", cC], ["guest", undefined]]
-    for (const [vis, d] of [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]]) {
-      for (const [who, ck] of actors) {
-        const p = await getHtml(`/diaries/${d.id}`, ck)
-        p.status === visExpect[vis][who]
-          ? pass(`vis: ${vis} diary → ${who} ${visExpect[vis][who]}`)
-          : fail(`vis ${vis} ${who}`, p.status)
-      }
+    const visMatrix = await Promise.all(
+      [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]].flatMap(([vis, d]) =>
+        actors.map(async ([who, ck]) => ({ vis, who, status: (await getHtml(`/diaries/${d.id}`, ck)).status })))
+    )
+    for (const { vis, who, status } of visMatrix) {
+      status === visExpect[vis][who]
+        ? pass(`vis: ${vis} diary → ${who} ${visExpect[vis][who]}`)
+        : fail(`vis ${vis} ${who}`, status)
     }
     // Identical 404 for private vs nonexistent — no existence oracle. Bodies
     // embed per-request nonces, so compare status + absence of private content.
@@ -996,37 +1002,49 @@ const main = async () => {
     r.status === 400 ? pass("upload: javascript: URI rejected") : fail("js uri", r.status)
 
     // ══ 10. Rate limits ═══════════════════════════════════════════
-    // profile PATCH — 20/hr per user.
-    let last = null
-    for (let i = 0; i < 21; i++) {
-      last = await callApi("/api/profile", { method: "PATCH", body: { bio: `x${i}` }, cookie: aC })
-      if (last.status === 429) break
-    }
-    last?.status === 429 ? pass("ratelimit: profile PATCH 429s after 20/hr") : fail("profile rl", last?.status)
+    // profile PATCH — 20/hr per user. The limiter serializes increments on
+    // the counter row, so a parallel burst still denies every request
+    // ranked past the limit — same contract, no serial round-trips.
+    const patchStatuses = await Promise.all(
+      Array.from({ length: 21 }, (_, i) =>
+        callApi("/api/profile", { method: "PATCH", body: { bio: `x${i}` }, cookie: aC }).then((r) => r.status))
+    )
+    patchStatuses.includes(429)
+      ? pass("ratelimit: profile PATCH 429s after 20/hr")
+      : fail("profile rl", patchStatuses)
     await prisma.rateLimit.deleteMany({ where: { key: `profile-update:${a.id}` } })
 
-    // diary-discuss — 10/min per user; cheap 404s burn the budget.
-    let dLast = null
-    for (let i = 0; i < 12; i++) {
-      dLast = await callApi(`/api/diaries/${pubD.id}/discuss`, { method: "POST", cookie: aC })
-      if (dLast.status === 429) break
-    }
-    ;[200, 201, 429].includes(dLast?.status)
-      ? pass(`ratelimit: discuss bounded (ended at ${dLast.status})`)
-      : fail("discuss rl", dLast?.status)
+    // diary-discuss — 10/min per user; cheap 404s burn the budget. Clear
+    // the key first so earlier suite activity can't skew the count, then
+    // burst past the limit — the canonical-thread race path is already
+    // proven safe, and over-limit requests must 429.
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "diary-discuss:" } } })
+    const dStatuses = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        callApi(`/api/diaries/${pubD.id}/discuss`, { method: "POST", cookie: aC }).then((r) => r.status))
+    )
+    dStatuses.includes(429)
+      ? pass("ratelimit: discuss bounded (burst denied past limit)")
+      : fail("discuss rl", dStatuses)
 
     // Suggest — 60/min per hashed IP; rotating spoofed XFF must not evade.
-    let sLast = null
-    for (let i = 0; i < 65; i++) {
-      const res = await fetch(`${BASE}/api/search/suggest?q=ab`, {
-        headers: { "x-forwarded-for": `10.${i % 250}.${i % 250}.${i % 250}` },
-      })
-      sLast = res.status
-      if (sLast === 429) break
+    // Fired in parallel chunks: the counter still serializes on the row,
+    // requests ranked past 60 deny — same contract, fraction of the wall-clock.
+    const sStatuses = []
+    for (let i = 0; i < 65; i += 30) {
+      sStatuses.push(...await Promise.all(
+        Array.from({ length: Math.min(30, 65 - i) }, (_, j) => {
+          const n = i + j
+          return fetch(`${BASE}/api/search/suggest?q=ab`, {
+            headers: { "x-forwarded-for": `10.${n % 250}.${n % 250}.${n % 250}` },
+          }).then((res) => res.status)
+        })
+      ))
+      if (sStatuses.includes(429)) break
     }
-    sLast === 429
+    sStatuses.includes(429)
       ? pass("ratelimit: suggest 429s; spoofed X-Forwarded-For cannot evade")
-      : fail("suggest rl/xff", sLast)
+      : fail("suggest rl/xff", sStatuses)
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "search-suggest" } } })
 
     // Batched login counters — the multi-key upsert must still increment
@@ -1051,10 +1069,16 @@ const main = async () => {
     // Sampled writes are random (~1/6 add 6), so crossing 60 takes ~66
     // requests on average but can need far more — 300 makes a miss
     // vanishingly unlikely while a real optimistic-allow hole still fails.
+    // Fired in parallel chunks of 50: identical counter semantics, and the
+    // whole burst lands inside one 60s window even on high-latency links —
+    // the old one-at-a-time loop could outlive the window and flake.
     let cDenied = 0
-    for (let i = 0; i < 300; i++) {
-      const cRes = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })
-      if (cRes.status === 429) { cDenied++; break }
+    for (let i = 0; i < 300 && cDenied === 0; i += 50) {
+      const statuses = await Promise.all(
+        Array.from({ length: Math.min(50, 300 - i) }, () =>
+          fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders }).then((r) => r.status))
+      )
+      cDenied = statuses.filter((s) => s === 429).length
     }
     const cDeniedAfter = cDenied > 0
       ? (await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })).status === 429
@@ -1551,15 +1575,15 @@ const main = async () => {
   } catch (e) {
     fail("suite error", String(e?.stack || e))
   } finally {
-    for (const id of postIds) await prisma.post.delete({ where: { id } }).catch(() => {})
-    for (const id of roomIds) await prisma.chatRoom.delete({ where: { id } }).catch(() => {})
-    for (const id of threadIds) await prisma.thread.delete({ where: { id } }).catch(() => {})
+    await Promise.all(postIds.map((id) => prisma.post.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(roomIds.map((id) => prisma.chatRoom.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(threadIds.map((id) => prisma.thread.delete({ where: { id } }).catch(() => {})))
     if (tagSlugs.length) await prisma.tag.deleteMany({ where: { slug: { in: tagSlugs } } }).catch(() => {})
-    for (const id of extraCategoryIds) await prisma.category.delete({ where: { id } }).catch(() => {})
-    for (const id of diaryIds) await prisma.growDiary.delete({ where: { id } }).catch(() => {})
-    for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
-    for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
-    for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+    await Promise.all(extraCategoryIds.map((id) => prisma.category.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(diaryIds.map((id) => prisma.growDiary.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(setupIds.map((id) => prisma.growSetup.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(strainIds.map((id) => prisma.strain.delete({ where: { id } }).catch(() => {})))
+    await Promise.all(users.map((u) => prisma.user.delete({ where: { id: u.id } }).catch(() => {})))
     if (rateKeys.length) await prisma.rateLimit.deleteMany({ where: { key: { in: rateKeys } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { OR: [{ key: { contains: "login" } }, { key: { startsWith: "search-suggest" } }, { key: { startsWith: "diary-discuss" } }, { key: { startsWith: "setup-discuss" } }, { key: { startsWith: "profile-update" } }, { key: { startsWith: "recover" } }] } }).catch(() => {})
     await prisma.$disconnect()
