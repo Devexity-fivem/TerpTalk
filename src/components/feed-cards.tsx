@@ -29,7 +29,7 @@ export function FeedThreadCard({
 }) {
   if (variant === "list") {
     return (
-      <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+      <Link href={href} className="block px-4 py-3 hover:bg-secondary/50 transition-colors">
         <div className="flex items-start gap-3">
           <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
             <Users className="w-5 h-5 text-primary" />
@@ -73,7 +73,7 @@ export function FeedThreadCard({
   // Compact — author-first social card: identity row, then the title,
   // then the context/action metadata.
   return (
-    <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+    <Link href={href} className="block px-4 py-3 hover:bg-secondary/50 transition-colors">
       <div className="mb-1.5 flex items-center gap-1.5">
         <ProfileCard
           username={t.author.profile?.username}
@@ -120,13 +120,13 @@ export function FeedUpdateCard({
 }) {
   if (variant === "card") {
     return (
-      <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+      <Link href={href} className="block px-4 py-3 hover:bg-secondary/50 transition-colors">
         <div className="flex items-start gap-3">
           {u.images[0]?.url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+            <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-14 h-14 rounded-xl object-cover shrink-0" />
           ) : (
-            <div className="shrink-0 w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
+            <div className="shrink-0 w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
               <Leaf className="w-6 h-6 text-primary" />
             </div>
           )}
@@ -163,7 +163,7 @@ export function FeedUpdateCard({
   // a count for a followed UNLISTED grow.
   const commentCount = u.diary.visibility === "PUBLIC" ? u._count.comments : 0
   return (
-    <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+    <Link href={href} className="block px-4 py-3 hover:bg-secondary/50 transition-colors">
       <div className="mb-1.5 flex items-center gap-1.5">
         <ProfileCard
           username={u.author.profile?.username}
@@ -297,7 +297,7 @@ export function FeedHarvestCard({
   }
 
   return (
-    <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+    <Link href={href} className="block px-4 py-3 hover:bg-secondary/50 transition-colors">
       <div className="mb-1.5 flex items-center gap-1.5">
         <ProfileCard
           username={h.author.profile?.username}

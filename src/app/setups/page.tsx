@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users, ChevronLeft, ChevronRight } from "@/lib/icons"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import PageHeader from "@/components/ui/page-header"
 import ProfileCard from "@/components/ui/profile-card"
 import EmptyState from "@/components/ui/empty-state"
 import { setupPath } from "@/lib/slugs"
@@ -73,17 +74,17 @@ export default async function SetupsPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <span className="tt-eyebrow">The grow rooms</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Grow Setup Showcases</h1>
-          <p className="text-muted-foreground">Show off your grow room and equipment. Get feedback and inspiration from the community.</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The grow rooms</span>}
+          title="Grow Setup Showcases"
+          description="Show off your grow room and equipment. Get feedback and inspiration from the community."
+        />
 
         <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
           <h2 className="font-display text-xl font-semibold">All Setups</h2>
           <Link
             href="/setups/new"
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors text-sm flex items-center gap-2"
+            className="tt-cta rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Share Your Setup
@@ -101,7 +102,7 @@ export default async function SetupsPage({
           </div>
         ) : (
           <>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {setups.map((setup) => (
                 <div
                   key={setup.id}
@@ -122,6 +123,18 @@ export default async function SetupsPage({
                       <h3 className="font-display font-semibold mb-1">{setup.title}</h3>
                     </Link>
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>
+                    {(() => {
+                      const chips = [setup.lighting, setup.tent ?? setup.space, setup.medium].filter((v): v is string => Boolean(v)).slice(0, 3)
+                      return chips.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {chips.map((chip) => (
+                            <span key={chip} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground truncate max-w-[12rem]">
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null
+                    })()}
                     <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1.5 min-w-0">
                         <Users className="w-3 h-3 shrink-0" />
@@ -146,7 +159,7 @@ export default async function SetupsPage({
                 {page > 1 ? (
                   <Link
                     href={pageHref(page - 1)}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </Link>
@@ -159,7 +172,7 @@ export default async function SetupsPage({
                 {page < totalPages ? (
                   <Link
                     href={pageHref(page + 1)}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                   >
                     Next <ChevronRight className="w-4 h-4" />
                   </Link>

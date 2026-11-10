@@ -16,6 +16,7 @@ export default function GrowerFollowButton({
   username,
   onToggle,
   source,
+  initialFollowing = false,
 }: {
   userId: string
   username: string | null
@@ -23,10 +24,14 @@ export default function GrowerFollowButton({
   onToggle?: (following: boolean) => void
   /** Attribution surface for the follow — allowlisted server-side. */
   source?: string
+  /** Server-verified follow state — surfaces that already know whether
+      this viewer follows the grower (e.g. a post's author rail) pass it
+      so the toggle never starts from a wrong guess. */
+  initialFollowing?: boolean
 }) {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const [following, setFollowing] = useState(false)
+  const [following, setFollowing] = useState(initialFollowing)
   const [busy, setBusy] = useState(false)
 
   if (!session) {

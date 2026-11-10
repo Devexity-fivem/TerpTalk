@@ -80,7 +80,8 @@ export default async function ContestPage() {
 
         {/* Diary of the Month */}
         <div className="mt-10 mb-6">
-          <h2 className="font-display text-2xl font-bold mb-2 flex items-center gap-3 tracking-tight">
+          <span className="tt-eyebrow">Monthly showcase</span>
+          <h2 className="font-display text-2xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
             <BookOpen className="w-7 h-7 text-primary" /> Diary of the Month
           </h2>
           <p className="text-muted-foreground">

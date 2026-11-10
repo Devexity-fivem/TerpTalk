@@ -162,7 +162,7 @@ export default function ProgressionPanel() {
       {data.upcoming.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {data.upcoming.map((u) => (
-            <Tooltip key={u.rung} content={`${u.label} (${u.rank}) unlocks at ${u.rung.toLocaleString()} XP`}>
+            <Tooltip key={u.rung} content={`${u.label} (${u.rank}) unlocks at ${u.rung.toLocaleString()} XP`} align="end">
               <span>
                 {u.label} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
               </span>

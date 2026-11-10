@@ -91,6 +91,17 @@ function typeLabel(type: string, kind?: string) {
   return TYPE_LABELS[type] ?? "Notification"
 }
 
+// Tint for the small type badge on the avatar — the group color gives the
+// eye a scan axis (social=pine, grows=leaf, progress=ember, system=neutral)
+// before the title is even read.
+function typeTint(type: string): string {
+  const g = notifGroup(type)
+  if (g === "social") return "bg-primary/10 text-primary"
+  if (g === "grows") return "bg-success/10 text-success"
+  if (g === "progress") return "bg-warning/10 text-warning"
+  return "bg-secondary text-muted-foreground"
+}
+
 // ── Notification grouping ──────────────────────────────────────────
 type NotifGroup = "all" | "social" | "grows" | "progress" | "system"
 
@@ -383,19 +394,24 @@ export default function NotificationsPage() {
                 <div className="relative shrink-0 pt-0.5">
                   <Avatar src={n.actor?.image} alt={n.actor?.name ?? "TerpTalk"} size="md" />
                   <Tooltip content={typeLabel(n.type, n.metadata?.kind)} className="absolute -bottom-1 -right-1">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-secondary text-muted-foreground">
+                    <span className={cn(
+                      "flex h-5 w-5 items-center justify-center rounded-full border-2 border-card",
+                      typeTint(n.type)
+                    )}>
                       <Icon className="h-3 w-3" aria-hidden="true" />
                     </span>
                   </Tooltip>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm wrap-break-word", !n.read ? "font-semibold" : "text-muted-foreground")}>
+                  <p className={cn("text-sm wrap-break-word", !n.read ? "font-semibold text-foreground" : "text-muted-foreground")}>
                     {n.title}
                   </p>
-                  <p className="text-sm text-muted-foreground wrap-break-word line-clamp-2">{n.content}</p>
+                  <p className={cn("text-sm wrap-break-word line-clamp-2", !n.read ? "text-foreground/75" : "text-muted-foreground")}>
+                    {n.content}
+                  </p>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <Tooltip content={new Date(n.createdAt).toLocaleString()} align="start">
-                      <time dateTime={n.createdAt}>
+                      <time dateTime={n.createdAt} className="tabular-nums">
                         {formatRelativeTime(n.createdAt)}
                       </time>
                     </Tooltip>
@@ -406,7 +422,7 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!n.read && (
-                    <span className="h-2 w-2 rounded-full bg-primary" aria-label="Unread" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card/60" aria-label="Unread" />
                   )}
                 </div>
               </div>
@@ -416,19 +432,19 @@ export default function NotificationsPage() {
                 key={n.id}
                 className={cn(
                   "group relative flex items-start gap-1 transition-colors",
-                  !n.read && "bg-primary/[0.04]"
+                  !n.read && "bg-primary/[0.07]"
                 )}
               >
                 {n.link ? (
                   <Link
                     href={n.link}
                     onClick={() => { if (!n.read) markRead([n.id]) }}
-                    className="tt-spotlight min-w-0 flex-1 p-4 hover:bg-secondary/50 rounded-l-lg"
+                    className="tt-spotlight min-w-0 flex-1 p-3.5 hover:bg-secondary/50 rounded-l-lg sm:p-4"
                   >
                     {row}
                   </Link>
                 ) : (
-                  <div className="min-w-0 flex-1 p-4">{row}</div>
+                  <div className="min-w-0 flex-1 p-3.5 sm:p-4">{row}</div>
                 )}
                 {/* Actions — stack vertically on touch so two 44px targets
                     don't crowd the row; side-by-side on desktop. */}

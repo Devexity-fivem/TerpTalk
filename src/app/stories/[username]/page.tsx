@@ -22,12 +22,18 @@ export default async function StoryPage({ params }: { params: Promise<{ username
 
   const author = await prisma.profile.findUnique({
     where: { username },
-    select: { userId: true, username: true },
+    select: { userId: true, username: true, user: { select: { image: true } } },
   })
   if (!author) notFound()
 
   const stories = await getAuthorStories(author.userId, session?.user?.id ?? null)
   if (stories.length === 0) notFound()
 
-  return <StoryViewer stories={JSON.parse(JSON.stringify(stories))} username={author.username ?? username} />
+  return (
+    <StoryViewer
+      stories={JSON.parse(JSON.stringify(stories))}
+      username={author.username ?? username}
+      avatarUrl={author.user.image}
+    />
+  )
 }

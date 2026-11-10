@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Inter, Sora } from "next/font/google";
+import { Inter, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -27,9 +27,14 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const sora = Sora({
+// Fraunces — the display face of the "Field Journal" direction: a
+// high-contrast variable serif that reads editorial and botanical
+// instead of geometric-SaaS. Loaded as a variable font (weight + optical
+// size axes), it replaces Sora 1:1 — still two families total.
+const fraunces = Fraunces({
   subsets: ["latin"],
-  variable: "--font-sora",
+  variable: "--font-fraunces",
+  axes: ["opsz"],
 });
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
@@ -112,7 +117,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nonce = (await headers()).get("x-nonce") ?? undefined
 
   return (
-    <html lang="en" className={`${inter.variable} ${sora.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${fraunces.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         {/* Applies the saved theme before first paint to avoid a palette flash */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

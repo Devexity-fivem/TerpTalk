@@ -111,8 +111,9 @@ export default function SignInPage() {
               <CannabisLeaf className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Welcome to TerpTalk</h1>
-          <p className="text-muted-foreground mt-2">Sign in to your account</p>
+          <span className="tt-eyebrow">21+ growers&apos; commons</span>
+          <h1 className="font-display text-3xl font-bold tracking-tight mt-2">Welcome to TerpTalk</h1>
+          <p className="text-muted-foreground mt-2">Sign in to your grow journal, diaries, and the community.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="tt-glass rounded-2xl border border-border/70 p-6 space-y-4">

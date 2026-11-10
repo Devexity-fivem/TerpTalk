@@ -5,7 +5,7 @@ import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { mediaProxyUrl } from "@/lib/media"
 import { notFound, permanentRedirect } from "next/navigation"
 import { getSession } from "@/lib/session"
-import { Settings, Users, MessageSquare, Pencil } from "@/lib/icons"
+import { Settings, Tent, Lightbulb, Sprout, Users, MessageSquare, Pencil } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -17,10 +17,12 @@ import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import ImageGallery from "@/components/image-gallery"
+import { Avatar } from "@/components/ui/avatar"
 import { escapeLike } from "@/lib/strain-stats"
 import Tooltip from "@/components/ui/tooltip"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
+import type { LucideIcon } from "@/lib/icons"
 
 export const dynamic = "force-dynamic"
 
@@ -37,6 +39,35 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     keywords: ["grow setup", "grow tent", "grow lights", "cannabis setup", setup.strain || ""].filter(Boolean),
     pathname: setupPath(setup),
   })
+}
+
+function EquipmentGroup({
+  title,
+  icon: Icon,
+  items,
+}: {
+  title: string
+  icon: LucideIcon
+  items: [string, string | null][]
+}) {
+  const filled = items.filter(([, v]) => v)
+  if (filled.length === 0) return null
+  return (
+    <div>
+      <h3 className="font-display text-base font-semibold flex items-center gap-2 mb-2">
+        <Icon className="w-4 h-4 text-primary" />
+        {title}
+      </h3>
+      <dl className="divide-y divide-border/60">
+        {filled.map(([label, value]) => (
+          <div key={label} className="py-2">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-sm font-medium whitespace-pre-wrap wrap-break-word">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
 }
 
 export default async function SetupPage({ params }: { params: Promise<{ id: string }> }) {
@@ -108,179 +139,226 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
       })
     : null
 
-  const specs: [string, string | null][] = [
-    ["Space", setup.space],
-    ["Tent", setup.tent],
-    ["Lighting", setup.lighting],
-    ["Ventilation", setup.ventilation],
-    ["Fans", setup.fans],
-    ["Containers", setup.containers],
-    ["Medium", setup.medium],
-    ["Nutrients", setup.nutrients],
-    ["Controllers", setup.controllers],
-    ["Other equipment", setup.equipment],
-    ["Strain", setup.strain],
+  const equipmentGroups: { title: string; icon: LucideIcon; items: [string, string | null][] }[] = [
+    {
+      title: "Environment",
+      icon: Tent,
+      items: [
+        ["Space", setup.space],
+        ["Tent", setup.tent],
+        ["Ventilation", setup.ventilation],
+        ["Fans", setup.fans],
+        ["Controllers", setup.controllers],
+      ],
+    },
+    { title: "Lighting", icon: Lightbulb, items: [["Lighting", setup.lighting]] },
+    {
+      title: "Root zone & feeding",
+      icon: Sprout,
+      items: [
+        ["Containers", setup.containers],
+        ["Medium", setup.medium],
+        ["Nutrients", setup.nutrients],
+      ],
+    },
+    { title: "Other equipment", icon: Settings, items: [["Equipment", setup.equipment]] },
   ]
+  const hasSpecs = equipmentGroups.some((g) => g.items.some(([, v]) => v))
+
+  const glanceRows: [string, React.ReactNode][] = [
+    ["Space", setup.space],
+    ["Lighting", setup.lighting],
+    ["Medium", setup.medium],
+    [
+      "Strain",
+      setup.strain && linkedStrain ? (
+        <Link href={strainPath(linkedStrain)} className="text-primary hover:underline">{setup.strain}</Link>
+      ) : (
+        setup.strain
+      ),
+    ],
+    ["Photos", setup.images.length],
+    ["Grows using it", usedIn.length],
+    ["Comments", setup._count.comments],
+    ["Shared", `${new Date(setup.createdAt).toLocaleDateString()}${edited ? " · edited" : ""}`],
+  ].filter(([, v]) => v !== null && v !== undefined && v !== "") as [string, React.ReactNode][]
+
+  const glancePanel = (
+    <SectionCard spotlight title="Setup at a glance">
+      <dl className="divide-y divide-border/60">
+        {glanceRows.map(([label, value]) => (
+          <div key={label} className="py-2">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-sm font-medium whitespace-pre-wrap wrap-break-word">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </SectionCard>
+  )
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <Breadcrumbs items={[
           { label: "Setup Showcases", href: "/setups" },
           { label: setup.title },
         ]} />
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
-          <h1 className="font-display text-3xl font-bold mb-2 wrap-break-word tracking-tight">{setup.title}</h1>
-          <p className="text-muted-foreground mb-4 whitespace-pre-wrap wrap-break-word">{setup.description}</p>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-            <UserPopover username={setup.author.profile?.username}>
-              <Link
-                href={`/u/${setup.author.profile?.username || setup.author.name}`}
-                className="flex items-center gap-1 hover:text-foreground"
-              >
-                <Users className="w-4 h-4" />
-                {setup.author.profile?.username || setup.author.name}
-                <RoleBadge role={setup.author.role} />
-                <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
-              </Link>
-            </UserPopover>
-            <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
-            {edited && (
-              <Tooltip content="Edited after posting">
-                <span>· edited</span>
-              </Tooltip>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ShareButtons path={setupPath(setup)} title={`${setup.title} — grow setup on TerpTalk`} />
-            {isOwner && (
-              <Tooltip content="Edit setup">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
+          <div className="min-w-0">
+            {/* Header — flat, no card */}
+            <h1 className="font-display text-3xl font-bold mb-2 wrap-break-word tracking-tight">{setup.title}</h1>
+            <p className="text-muted-foreground mb-4 whitespace-pre-wrap wrap-break-word">{setup.description}</p>
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-4">
+              <UserPopover username={setup.author.profile?.username}>
                 <Link
-                  href={`/setups/${setup.id}/edit`}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="Edit setup"
+                  href={`/u/${setup.author.profile?.username || setup.author.name}`}
+                  className="flex items-center gap-1 hover:text-foreground"
                 >
-                  <Pencil className="w-4 h-4" />
+                  <Users className="w-4 h-4" />
+                  {setup.author.profile?.username || setup.author.name}
+                  <RoleBadge role={setup.author.role} />
+                  <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
                 </Link>
-              </Tooltip>
-            )}
-            <OwnerDeleteButton
-              endpoint="/api/setups"
-              id={setup.id}
-              authorId={setup.authorId}
-              confirmText="Delete this setup? This permanently removes the setup, its photos, and its comments."
-              redirectTo="/setups"
-              iconOnly
-            />
-            <ReportButton type="SETUP" targetId={setup.id} authorId={setup.authorId} />
-            <SetupDiscussButton
-              setupId={setup.id}
-              setupHref={setupPath(setup)}
-              existingSlug={setup.discussion && !setup.discussion.deleted ? setup.discussion.slug : null}
-            />
-          </div>
-
-          {setup.images.length > 0 && (
-            <div className="mt-5">
-              <ImageGallery images={setup.images} />
+              </UserPopover>
+              <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
+              {edited && (
+                <Tooltip content="Edited after posting">
+                  <span>· edited</span>
+                </Tooltip>
+              )}
             </div>
-          )}
-        </div>
+            <div className="flex flex-wrap items-center gap-2 mb-6">
+              <ShareButtons path={setupPath(setup)} title={`${setup.title} — grow setup on TerpTalk`} />
+              {isOwner && (
+                <Tooltip content="Edit setup">
+                  <Link
+                    href={`/setups/${setup.id}/edit`}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Edit setup"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Link>
+                </Tooltip>
+              )}
+              <OwnerDeleteButton
+                endpoint="/api/setups"
+                id={setup.id}
+                authorId={setup.authorId}
+                confirmText="Delete this setup? This permanently removes the setup, its photos, and its comments."
+                redirectTo="/setups"
+                iconOnly
+              />
+              <ReportButton type="SETUP" targetId={setup.id} authorId={setup.authorId} />
+              <SetupDiscussButton
+                setupId={setup.id}
+                setupHref={setupPath(setup)}
+                existingSlug={setup.discussion && !setup.discussion.deleted ? setup.discussion.slug : null}
+              />
+            </div>
 
-        {/* Specs */}
-        <SectionCard spotlight
-          className="mb-6"
-          title={<span className="flex items-center gap-2"><Settings className="w-5 h-5 text-primary" /> Equipment &amp; Specs</span>}
-        >
-          <div className="grid md:grid-cols-2 gap-4">
-            {specs.filter(([, v]) => v).map(([label, value]) => (
-              <div key={label}>
-                <span className="text-xs text-muted-foreground">{label}</span>
-                {label === "Strain" && linkedStrain ? (
-                  <p className="text-sm font-medium">
-                    <Link href={strainPath(linkedStrain)} className="text-primary hover:underline">{value}</Link>
-                  </p>
-                ) : (
-                  <p className="text-sm font-medium">{value}</p>
+            {setup.images.length > 0 && (
+              <div className="mb-6">
+                <ImageGallery images={setup.images} />
+              </div>
+            )}
+
+            {/* At-a-glance — mobile position, directly after the header */}
+            <div className="lg:hidden mb-6">{glancePanel}</div>
+
+            {/* Specs */}
+            <SectionCard spotlight
+              className="mb-6"
+              title={<span className="flex items-center gap-2"><Settings className="w-5 h-5 text-primary" /> Equipment</span>}
+            >
+              {hasSpecs ? (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {equipmentGroups.map((g) => (
+                    <EquipmentGroup key={g.title} title={g.title} icon={g.icon} items={g.items} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No specs listed.</p>
+              )}
+            </SectionCard>
+
+            {/* Grows using this setup */}
+            {usedIn.length > 0 && (
+              <SectionCard spotlight className="mb-6" title={`Used in ${usedIn.length} grow${usedIn.length === 1 ? "" : "s"}`}>
+                <ul className="grid sm:grid-cols-2 gap-3">
+                  {usedIn.map((d) => (
+                    <li key={d.id}>
+                      <Link href={diaryPath(d)} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors">
+                        {d.updates[0]?.images[0]?.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={d.updates[0].images[0].url} alt="" className="w-12 h-12 rounded-lg object-cover border border-border" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">
+                            {(d.strain || d.title)[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{d.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {d.author.profile?.username || d.author.name}
+                            {d.strain ? ` · ${d.strain}` : ""}
+                            {d.harvested ? " · harvested" : ` · ${d.stage.toLowerCase()}`}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            )}
+
+            {/* Comments */}
+            <SectionCard spotlight
+              title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})</span>}
+            >
+              <div className="space-y-4 mb-6">
+                {comments.map((c) => (
+                  <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
+                    <Avatar
+                      src={c.author.image}
+                      alt=""
+                      size="sm"
+                      fallback={(c.author.profile?.username || c.author.name || "?")[0].toUpperCase()}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                        <UserPopover username={c.author.profile?.username}>
+                          <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
+                            {c.author.profile?.username || c.author.name}
+                          </Link>
+                        </UserPopover>
+                        <RoleBadge role={c.author.role} />
+                        <TierChip xp={c.author.profile?.xp ?? 0} publicMilestoneOptOut={c.author.profile?.publicMilestoneOptOut} />
+                        <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</span>
+                        <OwnerDeleteButton
+                          endpoint="/api/setups/comments"
+                          id={c.id}
+                          authorId={c.author.id}
+                          confirmText="Delete this comment? This cannot be undone."
+                          iconOnly
+                        />
+                        <ReportButton type="SETUP_COMMENT" targetId={c.id} authorId={c.author.id} />
+                      </div>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap wrap-break-word">{c.content}</p>
+                    </div>
+                  </div>
+                ))}
+                {comments.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No comments yet — be the first to ask about this setup.</p>
                 )}
               </div>
-            ))}
-            {specs.every(([, v]) => !v) && (
-              <p className="text-sm text-muted-foreground">No specs listed.</p>
-            )}
+              <SetupComments setupId={setup.id} />
+            </SectionCard>
           </div>
-        </SectionCard>
 
-        {/* Grows using this setup */}
-        {usedIn.length > 0 && (
-          <SectionCard spotlight className="mb-6" title={`Used in ${usedIn.length} grow${usedIn.length === 1 ? "" : "s"}`}>
-            <ul className="grid sm:grid-cols-2 gap-3">
-              {usedIn.map((d) => (
-                <li key={d.id}>
-                  <Link href={diaryPath(d)} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors">
-                    {d.updates[0]?.images[0]?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={d.updates[0].images[0].url} alt="" className="w-12 h-12 rounded-lg object-cover border border-border" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">
-                        {(d.strain || d.title)[0].toUpperCase()}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{d.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {d.author.profile?.username || d.author.name}
-                        {d.strain ? ` · ${d.strain}` : ""}
-                        {d.harvested ? " · harvested" : ` · ${d.stage.toLowerCase()}`}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
-        )}
-
-        {/* Comments */}
-        <SectionCard spotlight
-          title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})</span>}
-        >
-          <div className="space-y-4 mb-6">
-            {comments.map((c) => (
-              <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary text-xs font-bold">
-                  {(c.author.profile?.username || c.author.name || "?")[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                    <UserPopover username={c.author.profile?.username}>
-                      <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
-                        {c.author.profile?.username || c.author.name}
-                      </Link>
-                    </UserPopover>
-                    <RoleBadge role={c.author.role} />
-              <TierChip xp={c.author.profile?.xp ?? 0} publicMilestoneOptOut={c.author.profile?.publicMilestoneOptOut} />
-                    <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</span>
-                    <OwnerDeleteButton
-                      endpoint="/api/setups/comments"
-                      id={c.id}
-                      authorId={c.author.id}
-                      confirmText="Delete this comment? This cannot be undone."
-                      iconOnly
-                    />
-                    <ReportButton type="SETUP_COMMENT" targetId={c.id} authorId={c.author.id} />
-                  </div>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap wrap-break-word">{c.content}</p>
-                </div>
-              </div>
-            ))}
-            {comments.length === 0 && (
-              <p className="text-sm text-muted-foreground">No comments yet — be the first to ask about this setup.</p>
-            )}
-          </div>
-          <SetupComments setupId={setup.id} />
-        </SectionCard>
+          {/* At-a-glance — desktop sidebar */}
+          <aside className="hidden lg:block">{glancePanel}</aside>
+        </div>
       </div>
     </div>
   )

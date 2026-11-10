@@ -2,6 +2,8 @@ import { XP_TABLE, REP_RANKS, RANK_DISPLAY, PROGRESSION_RUNGS, STANDINGS, STANDI
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "@/lib/icons"
 import ProgressionPanel from "@/components/progression-panel"
+import PageHeader from "@/components/ui/page-header"
+import SectionCard from "@/components/ui/section-card"
 import { buildMetadata } from "@/lib/seo"
 
 export const metadata = buildMetadata({
@@ -44,22 +46,20 @@ export default function ProgressionPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="mb-8 text-center">
-          <Sprout className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Grow your rank</h1>
-          <p className="text-muted-foreground">
-            XP is your garden. You start as a seed — contribute, help other growers,
-            document your grows — and your profile grows with you.
-          </p>
-        </div>
+        <PageHeader
+          size="md"
+          context={<span className="tt-eyebrow">Member</span>}
+          title={
+            <span className="flex items-center gap-2">
+              <Sprout className="w-6 h-6 text-primary" /> Grow your rank
+            </span>
+          }
+          description="XP is your garden. You start as a seed — contribute, help other growers, document your grows — and your profile grows with you."
+        />
 
         <ProgressionPanel />
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Ways to grow</h2>
-          </div>
+        <SectionCard spotlight compact className="mb-4" title={<span className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" />Ways to grow</span>}>
           <div className="space-y-2">
             {SOURCES.map((s) => {
               const spec = XP_TABLE[s.key]
@@ -86,13 +86,9 @@ export default function ProgressionPage() {
             Experimentation, and Community — so how you contribute shapes your profile, not just
             how much. Higher ranks also require breadth: diversify your paths to keep climbing.
           </p>
-        </div>
+        </SectionCard>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Standing</h2>
-          </div>
+        <SectionCard spotlight compact className="mb-4" title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />Standing</span>}>
           <p className="text-xs text-muted-foreground mb-3">
             Standing is separate from XP — it only grows through peer-validated work: accepted
             answers, published guides, qualified referrals, and contest wins. It can&apos;t be
@@ -107,13 +103,9 @@ export default function ProgressionPage() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Quests &amp; challenges</h2>
-          </div>
+        <SectionCard spotlight compact className="mb-4" title={<span className="flex items-center gap-2"><Target className="w-4 h-4 text-primary" />Quests &amp; challenges</span>}>
           <p className="text-xs text-muted-foreground mb-3">
             Every day you get a few small quests — reply somewhere, tend a diary, help a
             newcomer. Higher ranks unlock extra quest slots. They reset at midnight UTC
@@ -134,16 +126,12 @@ export default function ProgressionPage() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <h2 className="font-display text-lg font-semibold mb-1">The Path to Master Cultivator</h2>
-          <p className="text-xs text-muted-foreground mb-3">
-            {REP_RANKS.length} ranks, {PROGRESSION_RUNGS.length} rungs total — every rank unlocks something
-            real: chat rooms, quest slots, better tools, and Garden Perks. Grow stages in between keep you
-            moving. Check in daily to build your garden streak — milestones land at 3, 7, 14,
-            30, 60, 100, and 365 days.
-          </p>
+        <SectionCard spotlight compact className="mb-4"
+          title="The Path to Master Cultivator"
+          description={`${REP_RANKS.length} ranks, ${PROGRESSION_RUNGS.length} rungs total — every rank unlocks something real: chat rooms, quest slots, better tools, and Garden Perks. Grow stages in between keep you moving. Check in daily to build your garden streak — milestones land at 3, 7, 14, 30, 60, 100, and 365 days.`}
+        >
           <div className="space-y-2">
             {REP_RANKS.map((r) => {
               const d = RANK_DISPLAY[r.name] ?? RANK_DISPLAY.Seed
@@ -158,10 +146,9 @@ export default function ProgressionPage() {
               )
             })}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <h2 className="font-display text-lg font-semibold mb-1">Garden Perks</h2>
+        <SectionCard spotlight compact className="mb-4" title="Garden Perks">
           <p className="text-xs text-muted-foreground">
             Ranks and streaks unlock real things, not decorations. Reach Harvested rank — or keep a
             60-day check-in streak — and you can pin your proudest harvest to the top of your profile.
@@ -169,13 +156,9 @@ export default function ProgressionPage() {
             on the home page. And from Rooted rank up, partner deals on the deals page open to members —
             the best offers wait for the most experienced growers.
           </p>
-        </div>
+        </SectionCard>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Fair play</h2>
-          </div>
+        <SectionCard spotlight compact title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />Fair play</span>}>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>You can&apos;t earn XP from your own content or from TerpBot.</li>
             <li>XP from deleted or removed content is reversed automatically.</li>
@@ -186,7 +169,7 @@ export default function ProgressionPage() {
           <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-center gap-1.5">
             <RotateCcw className="w-3 h-3" /> Reversed awards stay visible in your history, struck through.
           </p>
-        </div>
+        </SectionCard>
       </div>
     </div>
   )

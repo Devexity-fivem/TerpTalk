@@ -51,6 +51,27 @@ interface Props {
 const inputCls =
   "w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
 
+// Field-group header — eyebrow label over a serif subhead, with an
+// optional one-line note. The journal form reads in four movements:
+// identity → environment → schedule → visibility.
+function FieldGroupHead({
+  eyebrow,
+  title,
+  hint,
+}: {
+  eyebrow: string
+  title: string
+  hint?: string
+}) {
+  return (
+    <div className="mb-4">
+      <span className="tt-eyebrow">{eyebrow}</span>
+      <h3 className="font-display font-semibold text-lg mt-1.5 tracking-tight">{title}</h3>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
+
 // Shared diary metadata form — used by both create (/diaries/new) and
 // edit (/diaries/[id]/edit). Field markup and controls are identical;
 // only the submit wiring and start-date treatment differ.
@@ -101,10 +122,14 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Information */}
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {/* ── Identity — what this journal documents ─────────────────── */}
       <div className="space-y-4">
-        <h3 className="font-display font-semibold text-lg">Basic Information</h3>
+        <FieldGroupHead
+          eyebrow="Identity"
+          title="The grow"
+          hint="Name the journal and note the genetics you're running."
+        />
 
         <div>
           <label htmlFor="title" className="block text-sm font-medium mb-2">
@@ -174,6 +199,15 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
             />
           </div>
         </div>
+      </div>
+
+      {/* ── Environment & method — where and how it grows ──────────── */}
+      <div className="space-y-4 border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Environment & method"
+          title="Where it grows"
+          hint="Medium, light, space, and training — everything that shapes the canopy."
+        />
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -194,49 +228,19 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
           </div>
 
           <div>
-            <label htmlFor="startDate" className="block text-sm font-medium mb-2">
-              Start Date {startDateDisplay ? "" : "*"}
+            <label htmlFor="spaceDimensions" className="block text-sm font-medium mb-2">
+              Grow Space Dimensions
             </label>
-            {startDateDisplay ? (
-              <p className="px-4 py-2 rounded-lg border border-border bg-secondary/50 text-sm text-muted-foreground">
-                {startDateDisplay} — start date can&apos;t be changed
-              </p>
-            ) : (
-              <input
-                id="startDate"
-                type="date"
-                required
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className={inputCls}
-              />
-            )}
+            <input
+              id="spaceDimensions"
+              type="text"
+              value={formData.spaceDimensions}
+              onChange={(e) => setFormData({ ...formData, spaceDimensions: e.target.value })}
+              className={inputCls}
+              placeholder="e.g., 4x4x7 tent, 10x10 room"
+            />
           </div>
         </div>
-
-        <div>
-          <label htmlFor="visibility" className="block text-sm font-medium mb-2">
-            Visibility
-          </label>
-          <select
-            id="visibility"
-            value={formData.visibility}
-            onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
-            className={inputCls}
-          >
-            {DIARY_VISIBILITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {DIARY_VISIBILITY_OPTIONS.find((o) => o.value === formData.visibility)?.help}
-          </p>
-        </div>
-      </div>
-
-      {/* Grow Setup */}
-      <div className="space-y-4">
-        <h3 className="font-display font-semibold text-lg">Grow Setup</h3>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -265,41 +269,6 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
           </div>
 
           <div>
-            <label htmlFor="containerSize" className="block text-sm font-medium mb-2">
-              Container Size
-            </label>
-            <input
-              id="containerSize"
-              type="text"
-              value={formData.containerSize}
-              onChange={(e) => setFormData({ ...formData, containerSize: e.target.value })}
-              className={inputCls}
-              placeholder="e.g., 5 gallon, 10L"
-            />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="plantCount" className="block text-sm font-medium mb-2">
-              Number of plants
-            </label>
-            <input
-              id="plantCount"
-              type="number"
-              inputMode="numeric"
-              min="1"
-              max="99"
-              value={formData.plantCount}
-              onChange={(e) => setFormData({ ...formData, plantCount: e.target.value })}
-              className={inputCls}
-              placeholder="e.g., 3"
-            />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
             <label htmlFor="lightType" className="block text-sm font-medium mb-2">
               Lighting
             </label>
@@ -323,7 +292,42 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
               placeholder="Details, e.g., 240W quantum board"
             />
           </div>
+        </div>
 
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="containerSize" className="block text-sm font-medium mb-2">
+              Container Size
+            </label>
+            <input
+              id="containerSize"
+              type="text"
+              value={formData.containerSize}
+              onChange={(e) => setFormData({ ...formData, containerSize: e.target.value })}
+              className={inputCls}
+              placeholder="e.g., 5 gallon, 10L"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="plantCount" className="block text-sm font-medium mb-2">
+              Number of plants
+            </label>
+            <input
+              id="plantCount"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="99"
+              value={formData.plantCount}
+              onChange={(e) => setFormData({ ...formData, plantCount: e.target.value })}
+              className={inputCls}
+              placeholder="e.g., 3"
+            />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="nutrients" className="block text-sm font-medium mb-2">
               Nutrients
@@ -337,34 +341,20 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
               placeholder="e.g., Fox Farm, Advanced Nutrients"
             />
           </div>
-        </div>
 
-        <div>
-          <label htmlFor="spaceDimensions" className="block text-sm font-medium mb-2">
-            Grow Space Dimensions
-          </label>
-          <input
-            id="spaceDimensions"
-            type="text"
-            value={formData.spaceDimensions}
-            onChange={(e) => setFormData({ ...formData, spaceDimensions: e.target.value })}
-            className={inputCls}
-            placeholder="e.g., 4x4x7 tent, 10x10 room"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="equipment" className="block text-sm font-medium mb-2">
-            Equipment
-          </label>
-          <textarea
-            id="equipment"
-            value={formData.equipment}
-            onChange={(e) => setFormData({ ...formData, equipment: e.target.value })}
-            className={`${inputCls} resize-none`}
-            placeholder="List any additional equipment like fans, filters, controllers, etc."
-            rows={3}
-          />
+          <div>
+            <label htmlFor="equipment" className="block text-sm font-medium mb-2">
+              Equipment
+            </label>
+            <textarea
+              id="equipment"
+              value={formData.equipment}
+              onChange={(e) => setFormData({ ...formData, equipment: e.target.value })}
+              className={`${inputCls} resize-none`}
+              placeholder="List any additional equipment like fans, filters, controllers, etc."
+              rows={3}
+            />
+          </div>
         </div>
 
         <div>
@@ -417,17 +407,75 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
         )}
       </div>
 
+      {/* ── Schedule — the day-one anchor ──────────────────────────── */}
+      <div className="space-y-4 border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Schedule"
+          title="Day one"
+          hint="The start date anchors week counts, stage spans, and community comparisons."
+        />
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="startDate" className="block text-sm font-medium mb-2">
+              Start Date {startDateDisplay ? "" : "*"}
+            </label>
+            {startDateDisplay ? (
+              <p className="px-4 py-2 rounded-lg border border-border bg-secondary/50 text-sm text-muted-foreground">
+                {startDateDisplay} — start date can&apos;t be changed
+              </p>
+            ) : (
+              <input
+                id="startDate"
+                type="date"
+                required
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                className={inputCls}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Visibility — who can open this diary ───────────────────── */}
+      <div className="space-y-4 border-t border-border/60 pt-7">
+        <FieldGroupHead
+          eyebrow="Visibility"
+          title="Who can see it"
+        />
+
+        <div>
+          <label htmlFor="visibility" className="block text-sm font-medium mb-2">
+            Visibility
+          </label>
+          <select
+            id="visibility"
+            value={formData.visibility}
+            onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
+            className={inputCls}
+          >
+            {DIARY_VISIBILITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {DIARY_VISIBILITY_OPTIONS.find((o) => o.value === formData.visibility)?.help}
+          </p>
+        </div>
+      </div>
+
       {error && (
         <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 border-t border-border/60 pt-6">
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="tt-cta flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>
@@ -440,7 +488,7 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
         </button>
         <Link
           href={cancelHref}
-          className="px-6 py-3 border border-border rounded-lg hover:bg-secondary transition-colors text-center"
+          className="px-6 py-3 border border-border rounded-full hover:bg-secondary transition-colors text-center"
         >
           Cancel
         </Link>

@@ -340,10 +340,15 @@ export function ChatDock() {
         <Tooltip content="Open chat" align="end" className="hidden lg:inline-flex">
           <button
             onClick={openPanel}
-            className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-border bg-card px-2.5 py-3 shadow-md transition-colors hover:bg-secondary"
+            className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-border/80 bg-card/95 px-2.5 py-3 shadow-lg backdrop-blur transition-colors hover:border-primary/40 hover:bg-secondary"
             aria-label={chatUnread ? `Open chat (${chatUnreadRooms} rooms with new activity)` : "Open chat"}
             aria-haspopup="dialog"
           >
+            {/* Spectrum signature tick on the tab's leading edge */}
+            <span
+              className="absolute left-0 top-1/2 h-9 w-0.5 -translate-y-1/2 rounded-full bg-linear-to-b from-primary via-spectrum to-accent"
+              aria-hidden="true"
+            />
             <span className="relative">
               <MessagesSquare className="h-5 w-5 text-primary" aria-hidden="true" />
               {chatUnread && (
@@ -371,9 +376,13 @@ export function ChatDock() {
           aria-label="Chat panel"
           style={{ top: panelTop }}
           className={cn(
-            "fixed inset-x-0 top-16 z-40 flex flex-col border-t border-border bg-card",
+            // Mobile: a rounded-top sheet floating between header and the
+            // bottom dock — the rounded corners + lifted shadow read as a
+            // sheet, not a clipped page region.
+            "fixed inset-x-0 top-16 z-40 flex flex-col rounded-t-2xl border-t border-border bg-card",
+            "shadow-[0_-16px_48px_-16px_rgb(0_0_0/0.45)]",
             "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
-            "lg:left-auto lg:bottom-0 lg:right-0 lg:w-85 lg:border-l lg:border-t-0"
+            "lg:left-auto lg:bottom-0 lg:right-0 lg:w-85 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
           )}
         >
           <Suspense fallback={<PanelFallback />}>

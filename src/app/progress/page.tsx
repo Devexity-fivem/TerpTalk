@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import PageHeader from "@/components/ui/page-header"
 import SectionCard from "@/components/ui/section-card"
+import EmptyState from "@/components/ui/empty-state"
 import { signInHref } from "@/lib/callback-url"
 import { REP_RANKS, RANK_DISPLAY, UNLOCKS } from "@/lib/progression-config"
 
@@ -109,8 +110,22 @@ export default function ProgressPage() {
   if (failed || !data) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-          <p className="text-sm text-muted-foreground">Couldn&apos;t load your progress — try refreshing.</p>
+        <div className="max-w-2xl mx-auto px-4 py-8">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
+            <EmptyState
+              icon={Sprout}
+              title="Couldn't load your progress"
+              description="The progression service didn't answer — try refreshing."
+            >
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="tt-cta mt-5 inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold text-primary-foreground transition-all"
+              >
+                Refresh
+              </button>
+            </EmptyState>
+          </div>
         </div>
       </div>
     )
@@ -124,6 +139,7 @@ export default function ProgressPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <PageHeader
           size="md"
+          context={<span className="tt-eyebrow">Member</span>}
           title={
             <span className="flex items-center gap-2">
               <Sprout className="w-6 h-6 text-primary" /> My progress
@@ -133,16 +149,24 @@ export default function ProgressPage() {
         />
 
         {/* Level card */}
-        <section aria-label="Level" className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-2xl font-bold">Grow Level {data.level}</span>
-            <span className="text-sm text-muted-foreground">
-              of {data.maxLevel} · {data.stage.name} stage
+        <SectionCard spotlight
+          compact
+          className="mb-4"
+          id="level"
+          title={
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="font-display text-xl font-bold">Grow Level {data.level}</span>
+              <span className="text-sm font-normal text-muted-foreground">
+                of {data.maxLevel} · {data.stage.name} stage
+              </span>
             </span>
-            <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.rank.bg, data.rank.color)}>
+          }
+          actions={
+            <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.rank.bg, data.rank.color)}>
               <span aria-hidden="true">{data.rank.icon}</span> {data.rank.name}
             </span>
-          </div>
+          }
+        >
           <div className="flex justify-between text-xs text-muted-foreground mb-1">
             <span>{data.xp.toLocaleString()} XP</span>
             {data.stageProgress.remaining > 0 ? (
@@ -208,7 +232,7 @@ export default function ProgressPage() {
               ))}
             </div>
           )}
-        </section>
+        </SectionCard>
 
         {/* Garden streak — consecutive daily check-ins pay once-ever
             milestone bonuses. Missed days just restart the count. */}
@@ -347,7 +371,7 @@ export default function ProgressPage() {
               </div>
               <Link
                 href={data.nextAction.href}
-                className="shrink-0 inline-flex items-center gap-1 text-xs font-medium bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90"
+                className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors"
               >
                 {data.nextAction.cta} <ChevronRight className="w-3.5 h-3.5" />
               </Link>

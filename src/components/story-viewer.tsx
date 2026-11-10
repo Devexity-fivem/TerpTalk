@@ -9,6 +9,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { ChevronLeft, ChevronRight, Heart, Loader2, Trash2, X } from "@/lib/icons"
 import TimeAgo from "@/components/ui/time-ago"
+import { Avatar } from "@/components/ui/avatar"
 import MomentText from "@/components/moment-text"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { useToast } from "@/components/ui/toast"
@@ -18,7 +19,7 @@ import type { MomentDTO } from "@/lib/moments"
 
 const ADVANCE_MS = 7000
 
-export default function StoryViewer({ stories, username }: { stories: MomentDTO[]; username: string }) {
+export default function StoryViewer({ stories, username, avatarUrl }: { stories: MomentDTO[]; username: string; avatarUrl?: string | null }) {
   const { data: session } = useSession()
   const router = useRouter()
   const pathname = usePathname()
@@ -28,6 +29,11 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set(stories.filter((s) => s.liked).map((s) => s.id)))
+  // Per-story like totals — seeded from the server DTOs and kept in step
+  // with the viewer's own toggles so the count stays honest.
+  const [likeCounts, setLikeCounts] = useState<Map<string, number>>(
+    () => new Map(stories.map((s) => [s.id, s.counts.likes])),
+  )
 
   const story = list[idx]
 
@@ -64,8 +70,28 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
 
   if (!story) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">This story has expired.</p>
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-sm text-center">
+          <div className="tt-eyebrow justify-center mb-3">Story</div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight mb-2">This story has expired</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            Stories stay up for 24 hours, then they&apos;re gone for good.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href={`/u/${username}`}
+              className="rounded-full border border-border/70 px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+            >
+              View @{username}
+            </Link>
+            <Link
+              href="/feed"
+              className="tt-cta rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Back to feed
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }
@@ -78,10 +104,16 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
     if (busy) return
     setBusy(true)
     const wasLiked = likedIds.has(story.id)
+    const bump = wasLiked ? -1 : 1
     setLikedIds((s) => {
       const n = new Set(s)
       if (wasLiked) n.delete(story.id)
       else n.add(story.id)
+      return n
+    })
+    setLikeCounts((m) => {
+      const n = new Map(m)
+      n.set(story.id, Math.max(0, (n.get(story.id) ?? story.counts.likes) + bump))
       return n
     })
     try {
@@ -96,6 +128,11 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
         const n = new Set(s)
         if (wasLiked) n.add(story.id)
         else n.delete(story.id)
+        return n
+      })
+      setLikeCounts((m) => {
+        const n = new Map(m)
+        n.set(story.id, Math.max(0, (n.get(story.id) ?? story.counts.likes) - bump))
         return n
       })
       toast("Couldn't update your like", "error")
@@ -124,10 +161,13 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
 
   const isAuthor = session?.user?.id === story.author.id
   const liked = likedIds.has(story.id)
+  const likeCount = likeCounts.get(story.id) ?? story.counts.likes
+  const atEnd = idx >= list.length - 1
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
+        <div className="tt-eyebrow mb-3">Story</div>
         {/* progress bars */}
         <div className="flex gap-1 mb-3" aria-hidden="true">
           {list.map((s, i) => (
@@ -140,17 +180,28 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
           ))}
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <Link href={`/u/${username}`} className="flex items-center gap-2 text-sm font-semibold hover:text-primary min-w-0">
-            <span className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-              {username[0].toUpperCase()}
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <Link href={`/u/${username}`} className="flex items-center gap-2.5 text-sm font-semibold hover:text-primary min-w-0">
+            <Avatar
+              src={avatarUrl}
+              size="sm"
+              alt={`@${username}`}
+              className="ring-2 ring-primary/40"
+              fallback={<span className="text-primary text-xs font-bold">{username[0]?.toUpperCase()}</span>}
+            />
+            <span className="min-w-0">
+              <span className="block truncate">@{username}</span>
+              <span className="block text-xs font-normal text-muted-foreground"><TimeAgo value={story.createdAt} /></span>
             </span>
-            <span className="truncate">@{username}</span>
-            <span className="text-xs text-muted-foreground font-normal shrink-0"><TimeAgo value={story.createdAt} /></span>
           </Link>
-          <Link href="/feed" aria-label="Close stories" className="p-1.5 text-muted-foreground hover:text-foreground">
-            <X className="w-5 h-5" />
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs tabular-nums text-muted-foreground" aria-label={`Story ${idx + 1} of ${list.length}`}>
+              {idx + 1}/{list.length}
+            </span>
+            <Link href="/feed" aria-label="Close stories" className="p-1.5 text-muted-foreground hover:text-foreground">
+              <X className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
 
         <div className="relative rounded-2xl overflow-hidden border border-border/70 bg-card/80">
@@ -168,7 +219,9 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
         </div>
 
         {story.images.length > 0 && story.content && (
-          <MomentText text={story.content} className="mt-3 text-sm whitespace-pre-wrap wrap-break-word" />
+          <div className="mt-3 rounded-2xl border border-border/70 bg-card/80 px-4 py-3">
+            <MomentText text={story.content} className="text-sm whitespace-pre-wrap wrap-break-word" />
+          </div>
         )}
 
         <div className="flex items-center justify-between mt-4">
@@ -176,13 +229,24 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
             <button type="button" onClick={() => go(-1)} disabled={idx === 0} aria-label="Previous" className="p-2 rounded-full border border-border text-muted-foreground hover:text-foreground disabled:opacity-30">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <button type="button" onClick={() => go(1)} disabled={idx >= list.length - 1} aria-label="Next" className="p-2 rounded-full border border-border text-muted-foreground hover:text-foreground disabled:opacity-30">
+            <button type="button" onClick={() => go(1)} disabled={atEnd} aria-label="Next" className="p-2 rounded-full border border-border text-muted-foreground hover:text-foreground disabled:opacity-30">
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={like} disabled={busy} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"} className={cn("p-2 rounded-full border border-border transition-colors", liked ? "text-destructive border-destructive/40" : "text-muted-foreground hover:text-foreground")}>
+            <button
+              type="button"
+              onClick={like}
+              disabled={busy}
+              aria-pressed={liked}
+              aria-label={liked ? "Unlike" : "Like"}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 transition-colors disabled:opacity-50",
+                liked ? "text-destructive border-destructive/40" : "text-muted-foreground hover:text-foreground border-border",
+              )}
+            >
               {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={cn("w-5 h-5", liked && "fill-current")} />}
+              {likeCount > 0 && <span className="text-xs font-medium tabular-nums">{likeCount}</span>}
             </button>
             {isAuthor && (
               <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Delete story" className="p-2 rounded-full border border-border text-muted-foreground hover:text-destructive">
@@ -191,6 +255,12 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
             )}
           </div>
         </div>
+
+        {atEnd && (
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            That&apos;s the latest from @{username}
+          </p>
+        )}
       </div>
 
       <ConfirmDialog

@@ -104,7 +104,7 @@ export default function NotificationSettingsPage() {
 
         <h2 id="notifications" className="font-display text-lg font-semibold mb-3 scroll-mt-20">Notifications</h2>
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
           {TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>
@@ -129,7 +129,7 @@ export default function NotificationSettingsPage() {
         </div>
 
         <h2 id="privacy" className="font-display text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
           {PRIVACY_TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>

@@ -2,17 +2,21 @@
 
 import { signInHref } from "@/lib/callback-url"
 
-import { useEffect, useRef, useState, useCallback, Suspense } from "react"
+import { Fragment, useEffect, useRef, useState, useCallback, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Mail, Send, Loader2, MessageCircle, User } from "@/lib/icons"
+import { Mail, Send, Loader2, MessageCircle, User, ChevronLeft } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"
 import UserPopover from "@/components/user-popover"
+import PageHeader from "@/components/ui/page-header"
+import { Avatar } from "@/components/ui/avatar"
+import TimeAgo from "@/components/ui/time-ago"
+import { cn } from "@/lib/utils"
 
 interface Convo {
-  partner: { id: string; name: string | null; role: string; profile: { username: string | null } | null }
+  partner: { id: string; name: string | null; image: string | null; role: string; profile: { username: string | null } | null }
   lastMessage: string
   lastAt: string
   unread: number
@@ -23,6 +27,33 @@ interface Msg {
   senderId: string
   createdAt: string
   sender: { profile: { username: string | null } | null; name: string | null }
+}
+
+// Day separators in the thread — same labels the chat log uses.
+function sameDay(a: string, b: string): boolean {
+  const da = new Date(a)
+  const db = new Date(b)
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  )
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const now = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diffDays = Math.round((startOf(now) - startOf(d)) / 86_400_000)
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Yesterday"
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
+  })
 }
 
 export default function MessagesPage() {
@@ -43,6 +74,10 @@ function MessagesInner() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState("")
   const [loading, setLoading] = useState(true)
+  const [convoError, setConvoError] = useState(false)
+  // First page of the ACTIVE thread has landed — gates the thread spinner
+  // so the 10s poll never flickers it back on.
+  const [threadReady, setThreadReady] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
   const [hasOlder, setHasOlder] = useState(false)
@@ -52,9 +87,16 @@ function MessagesInner() {
 
   const loadConvos = useCallback(() => {
     fetch("/api/messages")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { setConvos(d?.conversations || []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => {
+        setConvos(d?.conversations || [])
+        setConvoError(false)
+        setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+        setConvoError(true)
+      })
   }, [])
 
   const messagesRef = useRef<Msg[]>([])
@@ -71,7 +113,9 @@ function MessagesInner() {
 
   const loadThread = useCallback((uid: string) => {
     const applyPage = (d: { messages?: Msg[]; incremental?: boolean; hasMore?: boolean } | null) => {
-      if (!d || activeWithRef.current !== uid) return // stale response — conversation changed mid-flight
+      if (activeWithRef.current !== uid) return // stale response — conversation changed mid-flight
+      setThreadReady(true)
+      if (!d) return
       if (d.incremental) {
         const fresh: Msg[] = d.messages || []
         if (fresh.length) {
@@ -106,7 +150,7 @@ function MessagesInner() {
           applyPage(d)
           if (d?.incremental && d?.hasMore && activeWithRef.current === uid) fetchPage()
         })
-        .catch(() => {})
+        .catch(() => { if (activeWithRef.current === uid) setThreadReady(true) })
     }
     fetchPage()
   }, [markRead])
@@ -149,6 +193,7 @@ function MessagesInner() {
       setMessages([])
       setHasOlder(false)
       setError("")
+      setThreadReady(false)
     }
     loadThread(withId)
     const poll = () => {
@@ -187,146 +232,307 @@ function MessagesInner() {
 
   const nameOf = (u: Convo["partner"]) => u.profile?.username || u.name || "Member"
   const active = convos.find((c) => c.partner.id === withId)?.partner
+  const totalUnread = convos.reduce((n, c) => n + c.unread, 0)
+  const partnerName = active ? nameOf(active) : "them"
 
   if (status === "loading" || loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-5xl px-4 py-8">
+          <div className="mb-6 h-9 w-52 animate-pulse rounded-lg bg-secondary" />
+          <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="h-[70dvh] min-h-80 animate-pulse rounded-2xl border border-border/70 bg-card/60" />
+            <div className="hidden h-[70dvh] min-h-80 animate-pulse rounded-2xl border border-border/70 bg-card/60 md:block" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="font-display text-2xl font-bold mb-6 flex items-center gap-2 tracking-tight">
-          <Mail className="w-6 h-6 text-primary" /> Messages
-        </h1>
+      <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-8">
+        <PageHeader
+          context={<span className="tt-eyebrow">Direct messages</span>}
+          title={
+            <span className="flex items-center gap-3">
+              <Mail className="h-6 w-6 text-primary" aria-hidden="true" />
+              Messages
+              {totalUnread > 0 && (
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary tabular-nums" aria-live="polite">
+                  {totalUnread} unread
+                </span>
+              )}
+            </span>
+          }
+          description="Private conversations with members — replies also land in your notifications."
+        />
 
-        <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-80">
-          {/* Conversation list */}
-          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl overflow-y-auto">
-            {convos.length === 0 ? (
-              <EmptyState
-                icon={MessageCircle}
-                title="No conversations yet"
-                description="Visit a member's profile and hit Message to start one."
-              />
-            ) : (
-              <div className="divide-y divide-border">
-                {convos.map((c) => (
-                  <div
-                    key={c.partner.id}
-                    className={`p-3 hover:bg-secondary/60 transition-colors ${withId === c.partner.id ? "bg-secondary" : ""}`}
+        <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
+          {/* Conversation list — full pane on mobile until a thread opens;
+              always visible beside the thread on md+. */}
+          <section
+            aria-label="Conversations"
+            className={cn(
+              "tt-spotlight flex h-[70dvh] min-h-80 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/80",
+              withId ? "hidden md:flex" : "flex"
+            )}
+          >
+            <div className="flex items-center justify-between border-b border-border/70 px-4 py-2.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inbox</h2>
+              {totalUnread > 0 && (
+                <span className="text-xs font-medium text-primary tabular-nums">{totalUnread} new</span>
+              )}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {convoError ? (
+                <EmptyState
+                  icon={Mail}
+                  title="Couldn't load conversations"
+                  description="Check your connection and try again."
+                >
+                  <button
+                    onClick={() => { setLoading(true); setConvoError(false); loadConvos() }}
+                    className="tt-cta mt-4 inline-flex items-center rounded-full px-4 py-2 text-xs font-semibold text-primary-foreground transition-all"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <UserPopover username={c.partner.profile?.username}>
+                    Try again
+                  </button>
+                </EmptyState>
+              ) : convos.length === 0 ? (
+                <EmptyState
+                  icon={MessageCircle}
+                  title="No conversations yet"
+                  description="Visit a member's profile and hit Message to start one."
+                  action={{ label: "Discover growers", href: "/discover" }}
+                />
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {convos.map((c) => {
+                    const isActive = withId === c.partner.id
+                    return (
+                      <li key={c.partner.id}>
+                        <div
+                          className={cn(
+                            "flex items-center gap-1 pr-1.5 transition-colors",
+                            isActive ? "bg-primary/[0.08]" : "hover:bg-secondary/60"
+                          )}
+                        >
                           <Link
                             href={`/messages?with=${c.partner.id}`}
-                            className="font-medium text-sm truncate hover:underline"
+                            aria-current={isActive ? "true" : undefined}
+                            className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-3.5"
                           >
-                            {nameOf(c.partner)}
+                            <span className="relative shrink-0">
+                              <Avatar src={c.partner.image} alt="" size="sm" />
+                              {c.unread > 0 && (
+                                <span
+                                  className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card"
+                                  role="status"
+                                  aria-label={`${c.unread} unread messages`}
+                                />
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-baseline justify-between gap-2">
+                                <span className={cn("truncate text-sm", c.unread > 0 ? "font-semibold text-foreground" : "font-medium text-foreground")}>
+                                  {nameOf(c.partner)}
+                                </span>
+                                <TimeAgo value={c.lastAt} className="shrink-0 text-[11px] text-muted-foreground" />
+                              </span>
+                              <span className="mt-0.5 flex items-center justify-between gap-2">
+                                <span className={cn("truncate text-xs", c.unread > 0 ? "font-medium text-foreground/80" : "text-muted-foreground")}>
+                                  {c.lastMessage}
+                                </span>
+                                {c.unread > 0 && (
+                                  <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground tabular-nums">
+                                    {c.unread > 99 ? "99+" : c.unread}
+                                  </span>
+                                )}
+                              </span>
+                            </span>
                           </Link>
-                        </UserPopover>
-                        <Tooltip content="View profile">
-                          <Link
-                            href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
-                            aria-label={`View ${nameOf(c.partner)}'s profile`}
-                            className="text-muted-foreground hover:text-primary shrink-0"
-                          >
-                            <User className="w-3.5 h-3.5" />
-                          </Link>
-                        </Tooltip>
-                      </div>
-                      <Link href={`/messages?with=${c.partner.id}`} className="flex items-center gap-2 shrink-0">
-                        {c.unread > 0 && (
-                          <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                            {c.unread}
-                          </span>
-                        )}
-                      </Link>
-                    </div>
-                    <Link href={`/messages?with=${c.partner.id}`} className="block">
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</p>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                          <Tooltip content="View profile">
+                            <Link
+                              href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
+                              aria-label={`View ${nameOf(c.partner)}'s profile`}
+                              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                            >
+                              <User className="h-3.5 w-3.5" />
+                            </Link>
+                          </Tooltip>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
 
           {/* Thread view */}
-          <div className="md:col-span-2 tt-spotlight bg-card/80 border border-border/70 rounded-2xl flex flex-col overflow-hidden">
+          <section
+            aria-label="Conversation"
+            className={cn(
+              "tt-spotlight flex h-[70dvh] min-h-80 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/80",
+              !withId ? "hidden md:flex" : "flex"
+            )}
+          >
             {!withId ? (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                Select a conversation
+              <div className="flex flex-1 items-center justify-center p-6">
+                <EmptyState
+                  icon={Mail}
+                  title="Select a conversation"
+                  description="Pick a conversation on the left — or start one from a member's profile."
+                />
               </div>
             ) : (
               <>
-                <div className="p-3 border-b border-border font-semibold text-sm">
-                  {active ? (
-                    <UserPopover username={active.profile?.username}>
-                      <Link href={`/u/${encodeURIComponent(nameOf(active))}`} className="hover:text-primary hover:underline">
-                        {nameOf(active)}
+                <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5 sm:px-4">
+                  <Link
+                    href="/messages"
+                    aria-label="Back to conversations"
+                    className="-ml-1 shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Link>
+                  <Avatar src={active?.image} alt="" size="sm" />
+                  <div className="min-w-0 flex-1">
+                    {active ? (
+                      <UserPopover username={active.profile?.username}>
+                        <Link
+                          href={`/u/${encodeURIComponent(nameOf(active))}`}
+                          className="block truncate text-sm font-semibold hover:text-primary hover:underline"
+                        >
+                          {nameOf(active)}
+                        </Link>
+                      </UserPopover>
+                    ) : (
+                      <span className="block truncate text-sm font-semibold text-foreground">Conversation</span>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">Direct message</p>
+                  </div>
+                  {active && (
+                    <Tooltip content="View profile">
+                      <Link
+                        href={`/u/${encodeURIComponent(nameOf(active))}`}
+                        aria-label={`View ${nameOf(active)}'s profile`}
+                        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+                      >
+                        <User className="h-4 w-4" />
                       </Link>
-                    </UserPopover>
-                  ) : (
-                    "Conversation"
+                    </Tooltip>
                   )}
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
                   {hasOlder && (
-                    <div className="flex justify-center">
+                    <div className="mb-3 flex justify-center">
                       <button
                         onClick={loadOlder}
                         disabled={loadingOlder}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded-full border border-border hover:bg-secondary/60 transition-colors disabled:opacity-50"
+                        className="rounded-full border border-border/70 px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
                       >
                         {loadingOlder ? "Loading..." : "Load earlier messages"}
                       </button>
                     </div>
                   )}
                   <div ref={topRef} />
-                  {messages.map((m) => {
-                    const mine = m.senderId === session?.user?.id
-                    return (
-                      <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${
-                          mine ? "bg-primary text-primary-foreground" : "bg-secondary"
-                        }`}>
-                          <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
-                          <p className={`text-[10px] mt-1 ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                            {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <div ref={bottomRef} />
+                  {!threadReady && messages.length === 0 ? (
+                    <div className="flex h-full items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div className="flex h-full items-center justify-center p-6">
+                      <EmptyState
+                        compact
+                        icon={MessageCircle}
+                        title="No messages yet"
+                        description={`Say hello to ${partnerName} — keep it friendly.`}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {messages.map((m, i) => {
+                        const mine = m.senderId === session?.user?.id
+                        const prev = messages[i - 1]
+                        const next = messages[i + 1]
+                        const dayBreak = !prev || !sameDay(prev.createdAt, m.createdAt)
+                        const continues =
+                          !!prev &&
+                          !dayBreak &&
+                          prev.senderId === m.senderId
+                        const lastOfRun =
+                          !next || next.senderId !== m.senderId || !sameDay(next.createdAt, m.createdAt)
+                        return (
+                          <Fragment key={m.id}>
+                            {dayBreak && (
+                              <div className="my-3 flex items-center gap-2" role="separator" aria-label={dayLabel(m.createdAt)}>
+                                <span className="h-px flex-1 bg-border/60" />
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  {dayLabel(m.createdAt)}
+                                </span>
+                                <span className="h-px flex-1 bg-border/60" />
+                              </div>
+                            )}
+                            <div className={cn("flex", mine ? "justify-end" : "justify-start", continues ? "mt-1" : "mt-3")}>
+                              <div
+                                className={cn(
+                                  "max-w-[78%] px-3.5 py-2 text-sm leading-relaxed wrap-break-word sm:max-w-[65%]",
+                                  mine
+                                    ? cn("rounded-2xl bg-primary text-primary-foreground", lastOfRun && "rounded-br-md")
+                                    : cn("rounded-2xl bg-secondary text-secondary-foreground", lastOfRun && "rounded-bl-md")
+                                )}
+                              >
+                                <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
+                              </div>
+                            </div>
+                            {lastOfRun && (
+                              <p className={cn("mt-1 text-[10px] text-muted-foreground", mine && "text-right")}>
+                                <time dateTime={m.createdAt}>
+                                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </time>
+                              </p>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                      <div ref={bottomRef} />
+                    </div>
+                  )}
                 </div>
-                <div className="p-3 border-t border-border">
-                  {error && <p className="text-xs text-destructive mb-2">{error}</p>}
-                  <div className="flex gap-2">
+
+                <div className="border-t border-border/70 p-3">
+                  {error && <p role="alert" className="mb-2 text-xs text-destructive">{error}</p>}
+                  <div className="flex items-center gap-2">
                     <input
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
-                      placeholder="Type a message..."
+                      placeholder={`Message ${partnerName}...`}
                       maxLength={2000}
-                      className="flex-1 px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      aria-label="Message"
+                      className="flex-1 rounded-full border border-border/70 bg-background px-4 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50"
                     />
                     <Tooltip content="Send message">
                       <button
                         onClick={send}
                         disabled={sending || !draft.trim()}
                         aria-label="Send message"
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                        className="tt-cta shrink-0 rounded-full p-2.5 text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </button>
                     </Tooltip>
                   </div>
+                  {draft.length > 1800 && (
+                    <p className="mt-1 text-right text-[10px] tabular-nums text-muted-foreground">
+                      {draft.length}/2000
+                    </p>
+                  )}
                 </div>
               </>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>

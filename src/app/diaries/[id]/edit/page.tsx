@@ -54,11 +54,12 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="mb-8">
           <Link href={diaryPath(diary)} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Diary
           </Link>
+          <span className="tt-eyebrow mb-2">Field journal</span>
           <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Edit Diary</h1>
           <p className="text-muted-foreground">
             Update your diary&apos;s details — past updates, harvest results, and the discussion thread are not affected.

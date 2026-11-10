@@ -6,8 +6,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
-import { ToggleLeft, Loader2 } from "@/lib/icons"
-import Link from "next/link"
+import { ToggleLeft, Loader2, ShieldCheck } from "@/lib/icons"
 
 interface Feature {
   key: string
@@ -69,8 +68,12 @@ export default function AdminFeaturesPage() {
 
   if (!isAdmin(session?.user?.role)) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Admins only. <Link href="/" className="text-primary ml-1">Go home</Link>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
+          <p className="text-muted-foreground">Administrator access required.</p>
+        </div>
       </div>
     )
   }
@@ -78,7 +81,7 @@ export default function AdminFeaturesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold font-display mb-2 flex items-center gap-2">
           <ToggleLeft className="w-6 h-6 text-primary" /> Feature Flags
         </h1>
         <p className="text-muted-foreground mb-6">Toggle platform features without deploying code.</p>
@@ -87,7 +90,7 @@ export default function AdminFeaturesPage() {
           <p className={`mb-4 text-sm ${message.startsWith("Saved") ? "text-success" : "text-destructive"}`}>{message}</p>
         )}
 
-        <div className="bg-card rounded-lg border border-border divide-y divide-border">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 divide-y divide-border/50">
           {features.map((f) => (
             <div key={f.key} className="flex items-center justify-between p-4">
               <div>

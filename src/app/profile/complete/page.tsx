@@ -131,11 +131,12 @@ export default function CompleteProfilePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center">
-          <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
+          <p className="tt-eyebrow mb-4">Journal opened</p>
+          <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4 ring-1 ring-primary/20">
             <Check className="w-12 h-12 text-primary" />
           </div>
-          <h1 className="font-display text-2xl font-bold mb-2 tracking-tight">Profile Complete!</h1>
-          <p className="text-muted-foreground">Taking you to the community...</p>
+          <h1 className="font-display text-2xl font-bold mb-2 tracking-tight">Welcome to the garden</h1>
+          <p className="text-muted-foreground">Taking you to the community…</p>
         </div>
       </div>
     )
@@ -145,17 +146,19 @@ export default function CompleteProfilePage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-8">
+          <p className="tt-eyebrow mb-4">First entry</p>
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-full">
+            <div className="bg-primary/10 p-3 rounded-full ring-1 ring-primary/20">
               <User className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">Complete Your TerpTalk Profile</h1>
-          <p className="text-muted-foreground mt-2">Tell the community about yourself</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Start your field journal</h1>
+          <p className="text-muted-foreground mt-2">A name, a face, a line or two — that&apos;s all a grower needs to be found in the garden.</p>
         </div>
 
-        <div className="bg-card p-8 rounded-lg border border-border">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="tt-edge-card bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+          <div className="tt-spectrum-bar h-1" />
+          <form onSubmit={handleSubmit} className="space-y-6 p-6 sm:p-8">
             {/* Avatar Upload */}
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
@@ -246,15 +249,15 @@ export default function CompleteProfilePage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="tt-cta w-full text-primary-foreground py-3 rounded-full font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving profile...
+                  Saving profile…
                 </>
               ) : (
-                "Complete Profile"
+                "Complete profile"
               )}
             </button>
           </form>

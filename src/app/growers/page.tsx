@@ -248,6 +248,21 @@ export default async function GrowersPage({
           ))}
         </div>
 
+        {/* Directory size — the real count behind this filter, not a
+            vanity metric. */}
+        {data.total > 0 && (
+          <p className="text-xs text-muted-foreground mb-3 tabular-nums">
+            {data.total} grower{data.total === 1 ? "" : "s"}{" "}
+            {mastery
+              ? `at ${MASTERY_META[mastery].name} M3+`
+              : sort === "active"
+                ? "growing right now"
+                : sort === "new"
+                  ? "recently joined"
+                  : "in the directory"}
+          </p>
+        )}
+
         {rows.length === 0 ? (
           <Surface padding="none">
             <EmptyState
@@ -285,36 +300,38 @@ export default async function GrowersPage({
               {rows.map(({ profile, liveGrow }) => {
                 const name = profile.username || profile.user.name || "Member"
                 const diaryCount = profile.user._count.diaryCreator
+                const joined = new Date(profile.joinDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })
                 return (
                   <Link
                     key={profile.user.id}
                     href={`/u/${profile.username || profile.user.name}`}
-                    className="tt-edge-card tt-spotlight block"
+                    className="tt-edge-card tt-spotlight tt-lift block h-full"
                   >
-                    <Surface padding="sm" className="h-full">
+                    <Surface padding="sm" className="h-full flex flex-col">
                       <div className="flex items-start gap-3">
                         <Avatar
                           src={profile.avatarUrl}
                           alt=""
                           size="lg"
-                          className="w-12 h-12 bg-primary/10 shrink-0"
+                          className="w-12 h-12 bg-primary/10 shrink-0 ring-1 ring-border/60"
                           fallback={<span className="text-primary font-bold">{name[0].toUpperCase()}</span>}
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <UserPopover username={profile.username}>
-                              <span className="font-semibold truncate">{name}</span>
+                              <span className="font-display font-semibold truncate">@{name}</span>
                             </UserPopover>
                             <RoleBadge role={profile.user.role} />
                             <TierChip xp={profile.xp} publicMilestoneOptOut={false} />
                           </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Joined {joined}</p>
                           {profile.bio && (
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{profile.bio}</p>
                           )}
                         </div>
                       </div>
 
-                      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
                         <span className="flex items-center gap-1">
                           <Leaf className="w-3.5 h-3.5" />
                           {diaryCount} public grow{diaryCount === 1 ? "" : "s"}
@@ -326,20 +343,23 @@ export default async function GrowersPage({
                       </div>
 
                       {/* Live grow context — only when a public unharvested
-                          diary exists; nothing is synthesized. */}
+                          diary exists; nothing is synthesized. Anchored at
+                          the card foot so cards stay even. */}
                       {liveGrow && (
-                        <div className="mt-3 rounded-xl bg-primary/5 border border-primary/15 px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-wide text-primary/80 font-semibold mb-0.5">
-                            Growing now · {(STAGE_LABELS[liveGrow.stage] ?? liveGrow.stage).toLowerCase()}
-                          </p>
-                          <p className="text-xs font-medium truncate">
-                            {liveGrow.title}
-                            {(liveGrow.strainRef?.name || liveGrow.strain) && (
-                              <span className="text-muted-foreground font-normal">
-                                {" "}· {liveGrow.strainRef?.name || liveGrow.strain}
-                              </span>
-                            )}
-                          </p>
+                        <div className="mt-auto pt-3">
+                          <div className="rounded-xl bg-primary/5 border border-primary/15 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wide text-primary/80 font-semibold mb-0.5">
+                              Growing now · {(STAGE_LABELS[liveGrow.stage] ?? liveGrow.stage).toLowerCase()}
+                            </p>
+                            <p className="text-xs font-medium truncate">
+                              {liveGrow.title}
+                              {(liveGrow.strainRef?.name || liveGrow.strain) && (
+                                <span className="text-muted-foreground font-normal">
+                                  {" "}· {liveGrow.strainRef?.name || liveGrow.strain}
+                                </span>
+                              )}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </Surface>

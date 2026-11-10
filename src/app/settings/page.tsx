@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session"
 import Link from "next/link"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
+import PageHeader from "@/components/ui/page-header"
 import {
   Settings, KeyRound, Download, Trash2, Ban, User, Bell, Shield, ChevronRight,
 } from "@/lib/icons"
@@ -51,10 +52,16 @@ export default async function SettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="mb-6 flex items-center gap-2">
-          <Settings className="w-6 h-6 text-primary" />
-          <h1 className="font-display text-2xl font-bold tracking-tight">Settings</h1>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Account</span>}
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Settings className="w-6 h-6 text-primary" /> Settings
+            </span>
+          }
+          description="Account, privacy, and notification preferences."
+        />
 
         <div className="space-y-8">
           {SECTIONS.map((section) => (
@@ -63,7 +70,7 @@ export default async function SettingsPage() {
                 <section.icon className="w-4 h-4 text-primary" aria-hidden="true" />
                 {section.title}
               </h2>
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
                 {section.items.map((item) => (
                   <Link
                     key={item.href + item.label}

@@ -107,7 +107,7 @@ export default function StaffApplicationsAdminPage() {
     return (
       <main className="min-h-screen max-w-3xl mx-auto px-4 py-12 text-center">
         <Shield className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-        <h1 className="text-2xl font-bold mb-2">Admins only</h1>
+        <h1 className="text-2xl font-bold font-display mb-2">Admins only</h1>
         <p className="text-muted-foreground mb-6">You do not have permission to review staff applications.</p>
         <Link href="/" className="text-primary hover:underline">Back to home</Link>
       </main>
@@ -116,10 +116,11 @@ export default function StaffApplicationsAdminPage() {
 
   return (
     <main className="min-h-screen max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-2">
         <Shield className="w-7 h-7 text-primary" />
-        <h1 className="text-2xl font-bold">Staff Applications</h1>
+        <h1 className="text-2xl font-bold font-display">Staff Applications</h1>
       </div>
+      <p className="text-sm text-muted-foreground mb-6">Review support and moderator applications.</p>
 
       <div className="flex gap-2 mb-6">
         {(["PENDING", "APPROVED", "REJECTED"] as const).map((f) => (
@@ -127,7 +128,7 @@ export default function StaffApplicationsAdminPage() {
             key={f}
             onClick={() => setFilter(f)}
             className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-colors",
               filter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
             )}
           >
@@ -137,7 +138,7 @@ export default function StaffApplicationsAdminPage() {
       </div>
 
       {applications.length === 0 ? (
-        <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-8 text-center text-muted-foreground">
           No {filter.toLowerCase()} applications.
         </div>
       ) : (
@@ -145,7 +146,7 @@ export default function StaffApplicationsAdminPage() {
           {applications.map((app) => (
             <div
               key={app.id}
-              className="tt-spotlight rounded-2xl border border-border bg-card p-5 hover:border-primary/50 transition-colors"
+              className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-5 hover:border-primary/50 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -208,7 +209,7 @@ export default function StaffApplicationsAdminPage() {
       {active && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-background p-6">
-            <h2 className="text-xl font-bold mb-2">Review application</h2>
+            <h2 className="font-display text-xl font-bold mb-2">Review application</h2>
             <p className="text-sm text-muted-foreground mb-4">
               {active.applicant.username || active.applicant.name} applied for {active.role}.
             </p>

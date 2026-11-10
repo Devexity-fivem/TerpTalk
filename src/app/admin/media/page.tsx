@@ -95,7 +95,7 @@ export default function AdminMediaPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
         </div>
       </div>
@@ -108,12 +108,12 @@ export default function AdminMediaPage() {
         <div className="flex items-center gap-3 mb-6">
           <ImageIcon className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Media Moderation</h1>
+            <h1 className="text-2xl font-bold font-display">Media Moderation</h1>
             <p className="text-muted-foreground text-sm">Review and remove user-uploaded images</p>
           </div>
         </div>
 
-        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
+        <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 mb-6 flex gap-3 flex-wrap">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -136,7 +136,7 @@ export default function AdminMediaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {items.length === 0 && <p className="col-span-full text-sm text-muted-foreground">No media found.</p>}
           {items.map((item) => (
-            <div key={`${item.type}-${item.id}`} className="bg-card rounded-xl border border-border p-3">
+            <div key={`${item.type}-${item.id}`} className="tt-spotlight rounded-xl border border-border/70 bg-card p-3">
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="block aspect-video bg-black/5 rounded-lg overflow-hidden mb-2">
                 <BlobImage src={item.url} alt={`${item.type} uploaded by @${item.author}`} className="w-full h-full object-contain" />
               </a>
@@ -157,7 +157,7 @@ export default function AdminMediaPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50"
+              className="flex items-center gap-1 px-4 py-2 rounded-full border border-border bg-card disabled:opacity-50"
             >
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
@@ -165,7 +165,7 @@ export default function AdminMediaPage() {
             <button
               onClick={() => setPage((p) => p + 1)}
               disabled={!hasMore}
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50"
+              className="flex items-center gap-1 px-4 py-2 rounded-full border border-border bg-card disabled:opacity-50"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>

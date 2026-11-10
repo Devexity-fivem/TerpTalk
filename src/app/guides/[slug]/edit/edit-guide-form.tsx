@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Save, ArrowLeft } from "@/lib/icons"
+import { Loader2, Save, ArrowLeft, BookOpen } from "@/lib/icons"
 
 const TOPICS = [
   { value: "BASICS", label: "Basics" },
@@ -52,32 +52,42 @@ export default function EditGuideForm({
     }
   }
 
+  const inputCls = "w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <Link href={`/guides/${slug}`} className="text-sm text-primary hover:underline flex items-center gap-1">
+        <div className="mb-5">
+          <Link href={`/guides/${slug}`} className="text-sm text-primary hover:underline inline-flex items-center gap-1">
             <ArrowLeft className="w-4 h-4" /> Back to guide
           </Link>
         </div>
-        <h1 className="font-display text-2xl font-bold mb-6 tracking-tight">Edit Guide</h1>
-        <form onSubmit={submit} className="space-y-4">
+        <header className="mb-6">
+          <p className="tt-eyebrow mb-1">Knowledge base</p>
+          <h1 className="font-display text-2xl font-bold flex items-center gap-2 tracking-tight">
+            <BookOpen className="w-6 h-6 text-primary" /> Edit Guide
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Changes are live immediately after saving.</p>
+        </header>
+        <form onSubmit={submit} className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
+            <label htmlFor="edit-guide-title" className="block text-sm font-medium mb-1">Title</label>
             <input
+              id="edit-guide-title"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               maxLength={150}
               required
-              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className={inputCls}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Topic</label>
+            <label htmlFor="edit-guide-topic" className="block text-sm font-medium mb-1">Topic</label>
             <select
+              id="edit-guide-topic"
               value={form.topic}
               onChange={(e) => setForm({ ...form, topic: e.target.value })}
-              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className={inputCls}
             >
               {TOPICS.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -85,22 +95,25 @@ export default function EditGuideForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Excerpt</label>
+            <label htmlFor="edit-guide-excerpt" className="block text-sm font-medium mb-1">Excerpt</label>
             <textarea
+              id="edit-guide-excerpt"
               value={form.excerpt}
               onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
               maxLength={500}
               rows={3}
-              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              className={`${inputCls} resize-none`}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Content</label>
+            <label htmlFor="edit-guide-content" className="block text-sm font-medium mb-1">Content</label>
             <textarea
+              id="edit-guide-content"
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
               rows={16}
-              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
+              className={`${inputCls} resize-y font-mono text-xs`}
+              placeholder="Write the guide. Plain text with line breaks — use '##' style headers for sections."
             />
           </div>
           {error && (
@@ -109,7 +122,7 @@ export default function EditGuideForm({
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-primary-foreground py-3 rounded-full font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Guide
           </button>

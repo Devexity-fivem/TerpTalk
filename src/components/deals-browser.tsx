@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Search, Tag, ExternalLink, Sprout, Wrench, Lock } from "@/lib/icons"
+import EmptyState from "@/components/ui/empty-state"
 
 interface Deal {
   slug: string
@@ -126,7 +127,7 @@ export default function DealsBrowser({ products }: { products: Deal[] }) {
             <button
               key={s.id}
               onClick={() => { setSection(s.id); setCat("all") }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${section === s.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${section === s.id ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"}`}
             >
               {"icon" in s && <s.icon className="w-3.5 h-3.5" />}
               {s.label}
@@ -140,7 +141,7 @@ export default function DealsBrowser({ products }: { products: Deal[] }) {
           <button
             key={c}
             onClick={() => setCat(c)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${cat === c ? "bg-primary/80 text-primary-foreground" : "bg-secondary/70 hover:bg-secondary"}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${cat === c ? "bg-primary/80 text-primary-foreground" : "bg-secondary/70 hover:bg-secondary"}`}
           >
             {c === "all" ? "All categories" : c}
           </button>
@@ -148,7 +149,11 @@ export default function DealsBrowser({ products }: { products: Deal[] }) {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-center text-muted-foreground py-10 text-sm">No products match.</p>
+        <EmptyState
+          compact
+          title="No products match"
+          description="Try a different search or category."
+        />
       ) : (
         groups.map(([label, items]) =>
           items.length === 0 ? null : (

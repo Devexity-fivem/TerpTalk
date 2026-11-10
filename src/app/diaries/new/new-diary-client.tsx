@@ -2,6 +2,7 @@
 
 import { signInHref } from "@/lib/callback-url"
 
+import { useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -38,6 +39,11 @@ export default function NewDiaryClient({
   const { data: session, status } = useSession()
   const router = useRouter()
 
+  useEffect(() => {
+    if (status === "authenticated" || status === "loading") return
+    router.push(signInHref(window.location.pathname + window.location.search))
+  }, [status, router])
+
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -47,7 +53,6 @@ export default function NewDiaryClient({
   }
 
   if (!session) {
-    router.push(signInHref(window.location.pathname + window.location.search))
     return null
   }
 
@@ -76,12 +81,13 @@ export default function NewDiaryClient({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <Link href="/diaries" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Diaries
           </Link>
+          <span className="tt-eyebrow mb-2">Field journal</span>
           <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Start New Grow Diary</h1>
           <p className="text-muted-foreground">Document your complete grow journey from seed to harvest</p>
           <p className="mt-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">

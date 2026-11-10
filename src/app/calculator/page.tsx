@@ -36,7 +36,7 @@ export default function GrowLightCalculatorPage() {
           </p>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 mb-8">
+        <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8 mb-8">
           <div className="grid sm:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium mb-2 flex items-center gap-2">

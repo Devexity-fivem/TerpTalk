@@ -1,71 +1,70 @@
 @import "tailwindcss";
 
 /* ── Palettes: single source of truth for every colour value ─────────
-   "Verdant Ember" — the 2026-11 rebrand. Dark is the flagship: deep
-   ink-green surfaces, a luminous mint-jade primary, warm ember accent,
-   iris spectrum. Light is the botanical counterpart: cool paper, deep
-   emerald, terracotta-ember. Both rounder + deeper than the retired
-   "Pine & Slate" system. */
+   "Field Journal" — the UI/UX redesign direction: warm botanical paper,
+   a deep forest primary, copper accent, softened luminous mint on dark,
+   and a high-contrast editorial serif (Fraunces) for display. Evolved
+   from "Verdant Ember" (2026-11) — same token pipeline, new values. */
 :root {
-  /* Light — studio daylight */
-  --light-background: #f0f4ec;
-  --light-foreground: #181a17;
-  --light-card: #fcfdf9;
-  --light-card-foreground: #181a17;
-  --light-popover: #ffffff;
-  --light-popover-foreground: #181a17;
-  --light-primary: #0d7a57;
+  /* Light — "Field Journal" warm botanical paper */
+  --light-background: #f4f2ea;
+  --light-foreground: #191c17;
+  --light-card: #fbfaf4;
+  --light-card-foreground: #191c17;
+  --light-popover: #fdfcf7;
+  --light-popover-foreground: #191c17;
+  --light-primary: #15603f;
   --light-primary-foreground: #ffffff;
-  --light-secondary: #e8ece3;
-  --light-secondary-foreground: #232620;
-  --light-muted: #e8ece3;
-  --light-muted-foreground: #5c6a60;
-  --light-accent: #b25e07;
+  --light-secondary: #eae6d8;
+  --light-secondary-foreground: #262820;
+  --light-muted: #eae6d8;
+  --light-muted-foreground: #5f675a;
+  --light-accent: #a05a17;
   --light-accent-foreground: #ffffff;
   --light-destructive: #dc2626;
   --light-destructive-foreground: #ffffff;
-  --light-border: #dfe4da;
-  --light-input: #dfe4da;
-  --light-ring: #0f8a62;
+  --light-border: #d9d5c6;
+  --light-input: #d9d5c6;
+  --light-ring: #1a6b45;
   /* Semantic status text — darker shades that hold >=4.5:1 on the
      light surfaces. Never use raw text-amber/green-* for meaningful text. */
   --light-success: #15803d;
   --light-warning: #93590a;
   /* Nameplate gradient stops — readable on neutral paper. */
-  --np-leaf: #0d7a57;
-  --np-a: #0d7a57;
+  --np-leaf: #15603f;
+  --np-a: #15603f;
   --np-b: #7565d8;
-  --np-c: #b25e07;
+  --np-c: #a05a17;
   --np-gold-1: #a16207;
   --np-gold-2: #854d0e;
   --np-gold-3: #713f12;
 
-  /* Dark — canopy after midnight */
-  --dark-background: #070a08;
+  /* Dark — canopy after midnight, softer mint */
+  --dark-background: #080c09;
   --dark-foreground: #edf1ec;
-  --dark-card: #111a13;
+  --dark-card: #121a14;
   --dark-card-foreground: #edf1ec;
-  --dark-popover: #111a13;
+  --dark-popover: #121a14;
   --dark-popover-foreground: #edf1ec;
-  --dark-primary: #3ef0a8;
+  --dark-primary: #6fe3ac;
   --dark-primary-foreground: #04130b;
-  --dark-secondary: #1a241c;
+  --dark-secondary: #1b251d;
   --dark-secondary-foreground: #edf1ec;
-  --dark-muted: #1a241c;
-  --dark-muted-foreground: #96a69c;
-  --dark-accent: #f5a94d;
+  --dark-muted: #1b251d;
+  --dark-muted-foreground: #9aa79d;
+  --dark-accent: #f0a958;
   --dark-accent-foreground: #1a1202;
   --dark-destructive: #f87171;
   --dark-destructive-foreground: #1f0603;
-  --dark-border: #2c4034;
-  --dark-input: #2c4034;
-  --dark-ring: #3ef0a8;
+  --dark-border: #2b3d31;
+  --dark-input: #2b3d31;
+  --dark-ring: #6fe3ac;
   /* Semantic status text — luminous shades readable on near-black. */
   --dark-success: #34d399;
   --dark-warning: #f5a94d;
   /* Nameplate gradient stops — luminous on dark. */
-  --np-leaf-dark: #3ef0a8;
-  --np-a-dark: #3ef0a8;
+  --np-leaf-dark: #6fe3ac;
+  --np-a-dark: #6fe3ac;
   --np-b-dark: #a78bfa;
   --np-c-dark: #f5a94d;
   --np-gold-1-dark: #f5a94d;
@@ -120,9 +119,9 @@
 
   /* Ambient + shadow material (rgb triplets) — kept to a whisper so the
      surfaces stay clean and professional. */
-  --glow-primary: 13 122 87;
+  --glow-primary: 21 96 63;
   --glow-spectrum: 117 101 216;
-  --glow-accent: 178 94 7;
+  --glow-accent: 160 90 23;
   --glow-strength: 0.09;
   --shadow-color: 30 34 30;
 }
@@ -160,9 +159,9 @@
     --np-gold-3-c: var(--np-gold-3-dark);
 
     --spectrum: var(--dark-spectrum);
-    --glow-primary: 52 226 154;
+    --glow-primary: 111 227 172;
     --glow-spectrum: 167 139 250;
-    --glow-accent: 245 169 77;
+    --glow-accent: 240 169 88;
     --glow-strength: 0.30;
     --shadow-color: 0 0 0;
     --card-hi: 0.14;
@@ -202,9 +201,9 @@
   --np-gold-2-c: var(--np-gold-2-dark);
   --np-gold-3-c: var(--np-gold-3-dark);
 
-  --glow-primary: 52 226 154;
+  --glow-primary: 111 227 172;
   --glow-spectrum: 167 139 250;
-  --glow-accent: 245 169 77;
+  --glow-accent: 240 169 88;
   --glow-strength: 0.30;
   --shadow-color: 0 0 0;
   --card-hi: 0.14;
@@ -235,7 +234,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --font-sans: var(--font-inter);
-  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
 
   /* Softer, theme-aware shadow scale — the colour resolves at runtime
      so the same utility lifts correctly on both palettes. */
@@ -245,12 +244,12 @@
   --shadow-xl: 0 24px 56px -18px rgb(var(--shadow-color) / 0.22);
   --shadow-2xl: 0 32px 72px -20px rgb(var(--shadow-color) / 0.28);
 
-  /* Rounder, friendlier corners — one scale change reskins every
-     rounded-* utility site-wide. */
-  --radius-lg: 0.75rem;
-  --radius-xl: 1.125rem;
-  --radius-2xl: 1.625rem;
-  --radius-3xl: 2.25rem;
+  /* Tighter, more confident corners — one scale change reskins every
+     rounded-* utility site-wide (Field Journal: less bubbly). */
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
 }
 
 * {
@@ -298,10 +297,13 @@ body::before {
 }
 
 /* Headings get the display face — one rule, site-wide typographic lift.
-   text-wrap: balance evens out ragged two-line headings automatically. */
+   Fraunces is a high-contrast variable serif: negative tracking and the
+   high optical-size axis give editorial weight; text-wrap: balance evens
+   out ragged two-line headings automatically. */
 h1, h2, h3 {
-  font-family: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: -0.015em;
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-variation-settings: "opsz" 144;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 

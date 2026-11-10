@@ -235,7 +235,7 @@ export default async function Home() {
       <LiveRefresh endpoint="/api/forum/updates" />
       <LiveRefresh endpoint="/api/diaries/updates" />
       {/* Hero — asymmetric split: pitch left, live canopy panel right */}
-      <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
+      <section className="relative overflow-hidden px-4 pb-10 pt-10 sm:px-6 lg:px-8 lg:pb-16 lg:pt-14">
         {/* Grow-light backdrop — blueprint grid + pine/iris/copper wash.
             No negative z: it would sink under the page's bg-background.
             The content grid is `relative` so it still paints on top. */}
@@ -340,7 +340,7 @@ export default async function Home() {
       </section>
 
       {/* Community Stream */}
-      <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
+      <section className="tt-reveal py-10 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
             <div>
@@ -355,118 +355,84 @@ export default async function Home() {
             </Link>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Categories */}
+          {/* Compact editorial activity preview — one unified strip, not a
+              second /feed. Homepage orients; the feed carries the full
+              surface. Hairline rows, small type tags, no nested cards. */}
+          <div className="grid lg:grid-cols-[1fr_260px] gap-8 items-start">
+            <ul className="divide-y divide-border/60 border-y border-border/60">
+              {latest.slice(0, 3).map((thread) => (
+                <li key={thread.id}>
+                  <Link
+                    href={`/forum/thread/${thread.slug}`}
+                    className="group flex items-center gap-3 py-3 hover:bg-secondary/40 -mx-3 px-3 rounded-lg transition-colors"
+                  >
+                    <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-primary">Discussion</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-sm truncate group-hover:text-primary transition-colors">{thread.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {thread.category.name} · {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
+                      </span>
+                    </span>
+                    <span className="hidden sm:block shrink-0">
+                      <ProfileCard
+                        username={thread.author.profile?.username}
+                        name={thread.author.profile?.username || thread.author.name}
+                        avatarUrl={thread.author.image}
+                        xp={thread.author.profile?.xp}
+                        publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+              {diaryUpdates.slice(0, 3).map((update) => (
+                <li key={update.id}>
+                  <Link
+                    href={diaryPath(update.diary)}
+                    className="group flex items-center gap-3 py-3 hover:bg-secondary/40 -mx-3 px-3 rounded-lg transition-colors"
+                  >
+                    <span className="w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-success">Grow log</span>
+                    {update.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={update.images[0].url} alt="" className="h-10 w-14 rounded-md object-cover shrink-0" />
+                    ) : null}
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-sm truncate group-hover:text-primary transition-colors">{update.title}</span>
+                      <span className="text-xs text-muted-foreground truncate">{update.diary.title}</span>
+                    </span>
+                    <span className="hidden sm:block shrink-0">
+                      <ProfileCard
+                        username={update.author.profile?.username}
+                        name={update.author.profile?.username || update.author.name}
+                        avatarUrl={update.author.image}
+                        xp={update.author.profile?.xp}
+                        publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {/* Topics — a quiet index, not a second nav map */}
             <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-primary" />
-                Explore Topics
-              </h3>
-              <div className="space-y-2">
-                {categories.slice(0, 5).map((cat) => (
+              <span className="tt-eyebrow">Topics</span>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {categories.slice(0, 8).map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/forum/category/${cat.slug}`}
-                    className="flex items-center justify-between p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
+                    className="rounded-full bg-card border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
                   >
-                    <div>
-                      <div className="font-medium text-sm">{cat.name}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-1">{cat.description}</div>
-                    </div>
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {cat._count.threads}
-                    </div>
+                    {cat.name} <span className="text-muted-foreground/70">{cat._count.threads}</span>
                   </Link>
                 ))}
-                {categories.length > 5 && (
-                  <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                    All categories <ArrowRight className="w-3 h-3" />
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            {/* Latest discussions */}
-            <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary" />
-                Latest Discussions
-              </h3>
-              <div className="space-y-2">
-                {latest.slice(0, 3).map((thread) => (
-                  <Link
-                    key={thread.id}
-                    href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
-                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                        <span className="text-primary">{thread.category.name}</span>
-                        <ProfileCard
-                          username={thread.author.profile?.username}
-                          name={thread.author.profile?.username || thread.author.name}
-                          avatarUrl={thread.author.image}
-                          xp={thread.author.profile?.xp}
-                          publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
-                          size="sm"
-                          linked={false}
-                        />
-                        <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                  View all discussions <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Fresh grow updates */}
-            <div>
-              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
-                <Leaf className="w-4 h-4 text-primary" />
-                Fresh Grow Updates
-              </h3>
-              <div className="space-y-2">
-                {diaryUpdates.slice(0, 4).map((update) => (
-                  <Link
-                    key={update.id}
-                    href={diaryPath(update.diary)}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
-                  >
-                    {update.images[0]?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={update.images[0].url}
-                        alt={update.title}
-                        className="w-20 h-14 rounded-lg object-cover shrink-0"
-                      />
-                    ) : (
-                      <div className="w-20 h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Leaf className="w-4 h-4 text-primary" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
-                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                        <span className="text-success">{update.diary.title}</span>
-                        <ProfileCard
-                          username={update.author.profile?.username}
-                          name={update.author.profile?.username || update.author.name}
-                          avatarUrl={update.author.image}
-                          xp={update.author.profile?.xp}
-                          publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
-                          size="sm"
-                          linked={false}
-                        />
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <Link href="/diaries" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
-                  View all diaries <ArrowRight className="w-3 h-3" />
+                <Link href="/forum" className="rounded-full px-3 py-1.5 text-xs font-medium text-primary hover:underline">
+                  All topics →
                 </Link>
               </div>
             </div>
@@ -475,7 +441,7 @@ export default async function Home() {
       </section>
 
       {/* Explore Section */}
-      <section className="tt-reveal py-20 px-4 sm:px-6 lg:px-8">
+      <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <span className="tt-eyebrow">Find your corner</span>
@@ -507,7 +473,7 @@ export default async function Home() {
       </section>
 
       {/* Community Pulse */}
-      <section className="tt-reveal tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
+      <section className="tt-reveal tt-hairline-t py-10 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Trending */}
@@ -582,7 +548,7 @@ export default async function Home() {
 
       {/* Grower of the Week */}
       {growerOfWeek && (
-        <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+        <section className="tt-reveal py-10 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
           <div className="max-w-7xl mx-auto">
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
               <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
@@ -676,7 +642,7 @@ export default async function Home() {
       )}
 
       {/* CTA — a contained grow-light banner rather than a bare strip */}
-      <section className="tt-reveal px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      <section className="tt-reveal px-4 pb-14 pt-4 sm:px-6 lg:px-8">
         <div className="tt-holo-border relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
           <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
           <div className="pointer-events-none absolute inset-0">

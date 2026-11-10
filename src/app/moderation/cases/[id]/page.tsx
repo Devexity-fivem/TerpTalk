@@ -206,7 +206,7 @@ export default function CasePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Staff access required.</p>
         </div>
       </div>
@@ -218,7 +218,7 @@ export default function CasePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Flag className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">{error || "Case not found"}</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">{error || "Case not found"}</h1>
           <Link href="/moderation" className="text-primary hover:underline text-sm">Back to queue</Link>
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function CasePage() {
           </span>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold">
+              <h1 className="text-xl font-bold font-display">
                 {kind === "FLAG" ? item.signalLabel : `${item.type?.replace(/_/g, " ")} report`}
               </h1>
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${PRIORITY_STYLES[item.priority] ?? ""}`}>{item.priority}</span>
@@ -258,8 +258,8 @@ export default function CasePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Evidence */}
-          <div className="md:col-span-2 tt-spotlight bg-card rounded-xl border border-border p-5 space-y-4">
-            <h2 className="font-semibold text-sm">Evidence</h2>
+          <div className="md:col-span-2 tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 space-y-4">
+            <h2 className="font-display text-sm font-semibold">Evidence</h2>
 
             {kind === "REPORT" && (
               <>
@@ -325,8 +325,8 @@ export default function CasePage() {
           </div>
 
           {/* Subject context */}
-          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
-            <h2 className="font-semibold text-sm mb-3">Subject</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+            <h2 className="font-display text-sm font-semibold mb-3">Subject</h2>
             {subject?.missing ? (
               <p className="text-sm text-muted-foreground">Account unavailable.</p>
             ) : subject && (
@@ -385,8 +385,8 @@ export default function CasePage() {
 
         {/* Actions */}
         {!terminal && (
-          <div className="tt-spotlight bg-card rounded-xl border border-border p-5 mb-6 space-y-3">
-            <h2 className="font-semibold text-sm">Actions</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5 mb-6 space-y-3">
+            <h2 className="font-display text-sm font-semibold">Actions</h2>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -476,8 +476,8 @@ export default function CasePage() {
 
         {/* Related + activity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
-            <h2 className="font-semibold text-sm mb-3">Related open cases</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+            <h2 className="font-display text-sm font-semibold mb-3">Related open cases</h2>
             {related.length === 0 && <p className="text-sm text-muted-foreground">None.</p>}
             <div className="space-y-2">
               {related.map((r) => (
@@ -491,8 +491,8 @@ export default function CasePage() {
               ))}
             </div>
           </div>
-          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
-            <h2 className="font-semibold text-sm mb-3">Case activity</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+            <h2 className="font-display text-sm font-semibold mb-3">Case activity</h2>
             {activity.length === 0 && <p className="text-sm text-muted-foreground">No staff actions yet.</p>}
             <div className="space-y-2">
               {activity.map((a) => (

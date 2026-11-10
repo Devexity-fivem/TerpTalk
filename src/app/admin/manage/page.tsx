@@ -211,7 +211,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Access denied</h1>
+          <h1 className="text-2xl font-bold font-display mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
         </div>
       </div>
@@ -225,7 +225,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-8 h-8 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">Admin Panel</h1>
+              <h1 className="text-2xl font-bold font-display">Admin Panel</h1>
               <p className="text-muted-foreground text-sm">Full site controls</p>
             </div>
           </div>
@@ -246,7 +246,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
               }`}
             >
@@ -295,8 +295,8 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                 { label: "Escalated", value: stats.escalatedReports },
                 { label: "Mod Actions", value: stats.newModerationActions },
               ].map((s) => (
-                <div key={s.label} className="tt-spotlight bg-card rounded-xl border border-border p-4">
-                  <div className="text-2xl font-bold text-primary tabular-nums">{s.value}</div>
+                <div key={s.label} className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
+                  <div className="text-2xl font-semibold font-display text-primary tabular-nums">{s.value}</div>
                   <div className="text-xs text-muted-foreground">{s.label}</div>
                 </div>
               ))}
@@ -304,8 +304,8 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
             {/* Launch health: referral pipeline + cron status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div className="tt-spotlight bg-card rounded-xl border border-border p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Referral Pipeline</div>
+              <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+                <div className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Referral Pipeline</div>
                 <div className="text-sm space-y-1">
                   <div>{stats.referrals.referredProfiles} referred · {stats.referrals.paidKeyed} paid · {stats.referrals.legacyUnkeyed} legacy · {stats.referrals.reversed} reversed</div>
                   {stats.referrals.eligibleUnpaid.length > 0 ? (
@@ -317,8 +317,8 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   )}
                 </div>
               </div>
-              <div className="tt-spotlight bg-card rounded-xl border border-border p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cron Health</div>
+              <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+                <div className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cron Health</div>
                 <div className="text-sm space-y-1">
                   <div>Last run date: {stats.cron.lastRunDate ?? "never"}</div>
                   <div>Today ({stats.cron.date}): {stats.cron.tasksDone} tasks done{stats.cron.tasksPending.length > 0 ? `, pending: ${stats.cron.tasksPending.join(", ")}` : ""}</div>
@@ -330,8 +330,8 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
         {/* USERS */}
         {tab === "users" && (
-          <div className="bg-card rounded-xl border border-border">
-            <div className="p-4 border-b border-border flex gap-3 flex-wrap">
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+            <div className="p-4 border-b border-border/60 flex gap-3 flex-wrap">
               <div className="relative flex-1 min-w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
@@ -353,7 +353,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
               </select>
               <button onClick={loadUsers} className="px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">Search</button>
             </div>
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border/50">
               {users.length === 0 && <p className="p-4 text-sm text-muted-foreground">No users found.</p>}
               {users.map((u) => (
                 <div key={u.id} className="p-4 flex items-center justify-between gap-4 flex-wrap">
@@ -437,11 +437,11 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
               <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
             ) : (
               <>
-                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+                  <div className="p-4 border-b border-border/60 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-warning" /> Unusual XP velocity (24h)
                   </div>
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/50">
                     {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over {VELOCITY_XP_THRESHOLD} repeatable XP in the last 24 hours.</p>}
                     {repFlags.velocity.map((v) => (
                       <div key={v.userId} className="p-3 text-sm flex items-center justify-between gap-3">
@@ -459,11 +459,11 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+                  <div className="p-4 border-b border-border/60 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <UsersIcon className="w-4 h-4 text-warning" /> Reciprocal like pairs (7d)
                   </div>
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/50">
                     {repFlags.reciprocalPairs.length === 0 && <p className="p-4 text-sm text-muted-foreground">No heavy mutual-like pairs detected.</p>}
                     {repFlags.reciprocalPairs.map((p, i) => (
                       <div key={i} className="p-3 text-sm flex items-center justify-between gap-3">
@@ -474,11 +474,11 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+                  <div className="p-4 border-b border-border/60 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <UserCheck className="w-4 h-4 text-warning" /> Likes from brand-new accounts (7d)
                   </div>
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/50">
                     {repFlags.newAccountLikes.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members received 5+ likes from accounts under 48h old.</p>}
                     {repFlags.newAccountLikes.map((n) => (
                       <div key={n.userId} className="p-3 text-sm flex items-center justify-between gap-3">
@@ -489,11 +489,11 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+                  <div className="p-4 border-b border-border/60 font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-primary" /> Staff progression actions
                   </div>
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/50">
                     {repFlags.staffActions.length === 0 && <p className="p-4 text-sm text-muted-foreground">No staff adjustments or reversals recorded.</p>}
                     {repFlags.staffActions.map((s) => (
                       <div key={s.id} className="p-3 text-sm flex items-center justify-between gap-3">
@@ -515,8 +515,8 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
         {/* ANNOUNCE */}
         {tab === "announce" && (
-          <div className="bg-card rounded-xl border border-border p-6 max-w-2xl">
-            <h2 className="font-semibold mb-1">Broadcast Announcement</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-6 max-w-2xl">
+            <h2 className="font-display font-semibold mb-1">Broadcast Announcement</h2>
             <p className="text-sm text-muted-foreground mb-4">Sends a notification to every active user.</p>
             <div className="space-y-4">
               <input
@@ -554,12 +554,12 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
         {/* SECURITY */}
         {tab === "security" && (
-          <div className="bg-card rounded-xl border border-border">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold">Security Events</h2>
+          <div className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 overflow-hidden">
+            <div className="p-4 border-b border-border/60">
+              <h2 className="font-display font-semibold">Security Events</h2>
               <p className="text-xs text-muted-foreground">Latest 50 — logins, registrations, rate limits, auth failures</p>
             </div>
-            <div className="divide-y divide-border max-h-[32rem] overflow-y-auto">
+            <div className="divide-y divide-border/50 max-h-[32rem] overflow-y-auto">
               {events.length === 0 && <p className="p-4 text-sm text-muted-foreground">No events recorded.</p>}
               {events.map((e) => (
                 <div key={e.id} className="p-3 text-sm flex items-center justify-between gap-3 flex-wrap">

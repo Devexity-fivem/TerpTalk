@@ -7,6 +7,7 @@ import { momentVisibleWhere, momentCardSelect, toMomentDTO, hashtagPath } from "
 import { notFound } from "next/navigation"
 import { Hash, MessageSquare } from "@/lib/icons"
 import PageHeader from "@/components/ui/page-header"
+import EmptyState from "@/components/ui/empty-state"
 import MomentCard from "@/components/moment-card"
 import Link from "next/link"
 
@@ -72,16 +73,16 @@ export default async function HashtagPage({
           description="Posts tagged by the community"
         />
 
-        <div className="tt-spotlight tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
           {items.map((m) => (
             <MomentCard key={m.id} moment={m} />
           ))}
           {items.length === 0 && (
-            <div className="p-12 text-center">
-              <Hash className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-display text-lg font-semibold mb-2">No posts yet</h3>
-              <p className="text-sm text-muted-foreground">Be the first to post with #{tag.name}.</p>
-            </div>
+            <EmptyState
+              icon={Hash}
+              title="No posts yet"
+              description={`Be the first to post with #${tag.name}.`}
+            />
           )}
         </div>
 

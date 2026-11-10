@@ -7,6 +7,7 @@ import { Trophy, Leaf } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/ui/empty-state"
+import PageHeader from "@/components/ui/page-header"
 import TierChip from "@/components/tier-chip"
 import UserPopover from "@/components/user-popover"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -105,16 +106,20 @@ export default async function YieldLeaderboardPage() {
   return (
     <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Trophy className="w-8 h-8 text-warning" />
-            Strain Yield Leaderboard
-          </h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl">
-            Real harvest outcomes reported by the TerpTalk community. Average yields are converted to ounces for comparison.
-            {" "}<Link href="/leaderboard" className="text-primary hover:underline">See the XP leaderboard</Link>.
-          </p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The ladder</span>}
+          title={
+            <span className="flex items-center gap-3">
+              <Trophy className="w-8 h-8 text-warning" /> Strain Yield Leaderboard
+            </span>
+          }
+          description={
+            <>
+              Real harvest outcomes reported by the TerpTalk community. Average yields are converted to ounces for comparison.{" "}
+              <Link href="/leaderboard" className="text-primary hover:underline">See the XP leaderboard</Link>.
+            </>
+          }
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
@@ -189,7 +194,7 @@ export default async function YieldLeaderboardPage() {
                           {row.topEntry.author.profile?.username || row.topEntry.author.name}
                         </Link>
                       </UserPopover>
-                      <TierChip xp={row.topEntry.author.profile?.xp ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} />
+                      <TierChip xp={row.topEntry.author.profile?.xp ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} tooltipAlign="end" />
                     </span>
                   </div>
                 </div>

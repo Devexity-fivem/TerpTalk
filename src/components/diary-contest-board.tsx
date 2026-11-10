@@ -97,14 +97,14 @@ export default function DiaryContestBoard() {
   }
 
   if (error && !data) {
-    return <div className="bg-card/80 rounded-2xl border border-border/70 p-6 text-sm text-muted-foreground">{error}</div>
+    return <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6 text-sm text-muted-foreground">{error}</div>
   }
   if (!data) {
-    return <div className="bg-card/80 rounded-2xl border border-border/70 p-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+    return <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
   }
 
   return (
-    <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
+    <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-5">
       <p className="text-xs text-muted-foreground mb-4">
         Eligibility: 4+ updates this month and at least one photo. Voting requires a 7-day-old account with 10+ XP.
       </p>
@@ -145,7 +145,7 @@ export default function DiaryContestBoard() {
       ) : (
         <div className="grid sm:grid-cols-2 gap-3">
           {data.entries.map((e) => (
-            <div key={e.id} className="rounded-lg border border-border overflow-hidden">
+            <div key={e.id} className="tt-spotlight rounded-xl border border-border overflow-hidden">
               <Link href={diaryPath(e.diary)} className="block">
                 <div className="aspect-video bg-secondary flex items-center justify-center overflow-hidden">
                   {e.diary.thumb ? (
@@ -184,7 +184,7 @@ export default function DiaryContestBoard() {
                       <button
                         onClick={() => vote(e.id)}
                         disabled={busy}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors min-h-9 ${e.votedByMe ? "bg-primary/10 text-primary" : "bg-secondary hover:bg-secondary/80"}`}
+                        className={`tap-target inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-h-9 ${e.votedByMe ? "bg-primary/10 text-primary" : "bg-secondary hover:bg-secondary/80"}`}
                       >
                         <Heart className={`w-3 h-3 inline mr-1 ${e.votedByMe ? "fill-current" : ""}`} />
                         {e.votedByMe ? "Voted" : "Vote"}

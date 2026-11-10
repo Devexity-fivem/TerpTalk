@@ -88,7 +88,7 @@ export default function ContestBoard() {
     <div>
       {/* Entry CTA */}
       {session && !alreadyEntered && (
-        <div className="bg-card/80 border border-border/70 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3">
           <input
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
@@ -116,7 +116,7 @@ export default function ContestBoard() {
       {error && <p className="text-sm text-destructive mb-4">{error}</p>}
 
       {entries.length === 0 ? (
-        <div className="bg-card/80 rounded-2xl border border-border/70">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
           <EmptyState
             icon={Trophy}
             title="No entries yet this week"
@@ -126,7 +126,7 @@ export default function ContestBoard() {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {entries.map((e, i) => (
-            <div key={e.id} className="bg-card/80 border border-border/70 rounded-2xl overflow-hidden">
+            <div key={e.id} className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl overflow-hidden">
               <div className="relative aspect-square">
                 <BlobImage src={e.imageUrl} alt={e.caption || "Budshot entry"} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover" />
                 {i === 0 && e.votes > 0 && (
@@ -153,7 +153,7 @@ export default function ContestBoard() {
                       onClick={() => vote(e.id)}
                       disabled={!session || e.mine}
                       aria-label={e.mine ? "You can't vote on your own entry" : "Vote for this budshot"}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors disabled:opacity-60 ${
                         e.votedByMe
                           ? "bg-red-500/15 text-destructive"
                           : "bg-secondary hover:bg-secondary/80"
