@@ -142,20 +142,22 @@ When started: new branch from the then-approved integration baseline → audit e
 ## 7. Screenshot evidence index
 All under `C:/Users/pablo/AppData/Local/Temp/audit-shots/` — `v2-*` (post-foundation), `p2-*` (post-filters), `new-*` (palette check). Use `reducedMotion:"reduce"` for full-page captures (tt-reveal).
 
-## 8. Release-gate evidence (2026-11-09, tree `64598a0` + test-contract update)
+## 8. Release-gate evidence (2026-11-09, final tree `8c9205e`)
 
-`npm run test:master` completed: **29/32 PASS**. The 3 non-passes are wrapper timeouts (`diary` 480s, `runtime-verify` 720s, `browser` 300s) caused by dev-DB WAN latency — the dev database is the remote Supabase pooler (`aws-0-us-east-1.pooler.supabase.com:6543`) at ~260–280ms per query from this machine; every request in these suites performs multiple round-trips, so wall-clock exceeds the caps while assertions pass. The caps were NOT raised and no suite was skipped.
+**`npm run test:master`: 32/32 PASS — Overall: PASS** (~23 min wall-clock). Production-mode verification (`runtime-prod-verify`: real `next build` + `next start` + header/CSP/cookie/fail-closed checks) PASS inside the run.
 
-Standalone runs (suite scripts have no wrapper cap) on the same tree:
+### How the gate was run
+The dev Supabase pooler could not host the gate from this machine: transaction mode (`:6543`, the `.env` default) costs ~200–280ms/query WAN, and session mode (`:5432`, `DATABASE_URL_UNPOOLED`) is ~52ms/query but caps at 15 clients — dev server + suite + prod-verify server exceeded it (EMAXCONNSESSION flakes). The gate therefore ran against a **temporary claimable Neon Postgres** (`steep-forest-16513711`, aws-us-east-2, ~25ms/query, unclaimed/72h expiry): `prisma migrate deploy` (all migrations) + `prisma/seed.ts` + `seed-strains.cjs` (658 catalog strains — required by strain-lifecycle's FORCE_NULL guard checks). Dev server and suites ran with `DATABASE_URL=<neon>` + `DB_GUARD_EXTRA_HOSTS=neon.tech` — the guard's sanctioned ad-hoc-target path; no assertions changed for the environment. Same code, same schema, same seed data path as dev.
 
-| Suite | Standalone result |
-|---|---|
-| `diary-verify.mjs` | **290/290 PASS** (~804s) |
-| `browser-tests.mts` | **92/92 PASS** — after updating the mobile-dock contract to the new IA (Home·Feed·Create·Chat·Alerts·You; Diaries reachable via header drawer `#tt-nav-drawer`). Old assertion expected `/diaries` in the dock — superseded by design. |
-| `runtime-verify.mjs` | **227/228** — single failure `sampled chat-rooms rl`, an environmental flake unrelated to this diff (see below) |
+### Test-suite optimizations committed (`8c9205e`)
+The three formerly-timing-out suites were strictly sequential — every request paid multiple WAN DB round-trips. Parallelized independent work with identical assertions: fixture logins, visibility/activity/media matrices, rate-limit bursts (the limiter serializes counter increments, so over-limit requests still deny), the 300-request sampled chat-rooms loop (now chunked inside one 60s window — also removes the window-expiry flake), and per-type parallel teardown. Result on Neon: diary 178s (was 804s timeout), runtime-verify 142s (was 720s timeout + flake), browser 145s (was 300s timeout).
 
-`runtime-verify` flake RCA: the check deletes `chat-rooms:*` rows, fires ≤300 sequential requests at `/api/chat/rooms?badge=1` until a 429, then requires the next request to also 429 within the same 60s window. Sampled counting (+6 per ~1/6 of requests) needs ~66+ requests to cross the limit of 60; each request costs several ~270ms DB round-trips (session + rate-limit + badge activity), so the loop takes ~60–100s — comparable to the window. When the window expires mid-loop the counter resets and the post-limit probe lands in a fresh window (`cDeniedAfter:false`, observed row `count:66`). On a fast link the loop finishes in ~10–20s and it passes — it passed in the earlier 33/33 run. `git diff origin/dev...HEAD` is empty for `src/lib/rate-limit.ts`, `src/app/api/chat/`, `src/lib/`, and `scripts/runtime-verify.mjs`; last rate-limiter commits (`1cf8ff7`, `5dc1814`) predate this branch. Pre-existing test-design assumption, not a regression.
+### Prior gate attempts (same tree, Supabase dev DB)
+- `test:master` on transaction pooler: 29/32 — diary/runtime/browser wrapper timeouts (all assertions green standalone) + runtime sampled-RL flake.
+- On session pooler: 29/32 — feed (leaked `__br_*` fixtures from killed runs), plant-doctor + runtime-prod (EMAXCONNSESSION at the 15-client cap).
+- Orphaned `__tmp-redesign-verify.mts` processes from earlier sessions were found holding connections and killed; maintenance-mode pollution from a crashed run explained the forum 9-fail blip (106/106 clean after).
 
-Other gates on final tree: `npx tsc --noEmit` ✓ · `npm run lint` ✓ · `npm run test:fast` 5/5 ✓ · `npm run build` ✓ (157 routes) · `runtime-prod-verify` ✓ (inside master run).
+### Other gates on final tree
+`npx tsc --noEmit` ✓ · `npm run lint` ✓ · `npm run test:fast` 5/5 ✓ · `npm run build` ✓ (157 routes) · browser-verified every major route at 1440/1024/390 incl. populated fixtures.
 
-**Bottom line:** every redesign assertion and every backend contract passes; the only reds are wall-clock timeouts + one latency-sensitive pre-existing flake. A clean `test:master` requires a run against a lower-latency database (or maintainer-approved cap review). No code change on this branch can fix WAN latency.
+**Bottom line:** every redesign assertion and every backend contract passes on the final tree. The earlier reds were environmental (WAN latency, pooler client cap, fixture pollution) — none were code defects.
