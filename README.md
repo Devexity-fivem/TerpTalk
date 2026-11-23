@@ -52,6 +52,8 @@ If you ever need a manual migration (disaster recovery), use the **session-mode*
 DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require" npx prisma migrate deploy
 ```
 
+**Row-level security / Supabase Data API:** Supabase exposes the `public` schema over its auto-generated REST/GraphQL Data API, and its default privileges grant the `anon`/`authenticated` roles read/write on every table. Migration `20261221000000_data_api_lockdown` enables RLS on every table and revokes those grants plus the default privileges that would re-grant them. The app is unaffected — Prisma connects as the table-owning `postgres` role, which bypasses RLS. Every migration that creates a table must also `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;`; `scripts/security-tests.mts` enforces it.
+
 ## Testing
 
 ```bash
@@ -158,4 +160,5 @@ Then verify the deploy:
 - Never return raw `User` objects — always use `publicUserSelect`
 - Soft-delete content (`deleted` flag); filter it in every listing
 - New mutation endpoints require auth + `isBanned` + `rateLimit` + validation
+- New tables need `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` in their migration — Supabase's Data API exposes `public`, and security-tests enforces RLS on every table
 - No `any`, no disabling TS/ESLint, no fake features

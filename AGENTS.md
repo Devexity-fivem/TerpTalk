@@ -15,3 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Before creating a new test file, add a section to the canonical domain suite listed in README → Testing. New files only for genuinely new domains.
 - Source-string (`readFileSync(src)`) assertions only for contracts with no behavioral surface; behavior (auth, privacy, ownership, reputation, parsing, TerpBot) must be exercised via HTTP or the real lib function. No route-mirror queries. No `if (fixture) assert` skips.
 - DB suites import `scripts/db-guard.mjs`, clean up everything they create, and keep `Profile.reputation == SUM(ledger)` in fixtures.
+
+# Schema rules
+
+- Every migration that creates a table must include `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` — Supabase exposes `public` via its Data API, and `scripts/security-tests.mts` asserts RLS on all public tables.

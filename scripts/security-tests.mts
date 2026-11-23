@@ -1378,6 +1378,58 @@ async function run() {
       await prisma.rateLimit.deleteMany({ where: { key: { in: [...harnessKeys, ...foreignKeys] } } }).catch(() => {})
     }
 
+    // ── Supabase Data API lockdown ───────────────────────────────
+    // Supabase serves `public` over its auto-generated REST/GraphQL
+    // Data API and its default privileges grant anon/authenticated
+    // read/write on every table there. Migration
+    // prisma/migrations/20261221000000_data_api_lockdown enables RLS on
+    // every table and revokes those grants; the assertions below keep
+    // the lockdown from drifting. They also hold on plain Postgres (no
+    // anon role, NULL ACLs), so there is no environment branching.
+    const tablesWithoutRls = await prisma.$queryRaw<{ relname: string }[]>`
+      SELECT c.relname FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+      ORDER BY 1
+    `
+    assert.deepEqual(
+      tablesWithoutRls,
+      [],
+      `every public table has RLS enabled — add ALTER TABLE "X" ENABLE ROW LEVEL SECURITY to the migration that created: ${tablesWithoutRls.map((r) => r.relname).join(", ")}`
+    )
+
+    const dataApiGrants = await prisma.$queryRaw<{ relname: string; grantee: string; privilege: string }[]>`
+      SELECT c.relname, COALESCE(r.rolname, 'PUBLIC') AS grantee, a.privilege_type AS privilege
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      CROSS JOIN LATERAL aclexplode(c.relacl) a
+      LEFT JOIN pg_roles r ON r.oid = a.grantee
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+        AND (a.grantee = 0 OR r.rolname IN ('anon', 'authenticated'))
+      ORDER BY 1, 2, 3
+    `
+    assert.deepEqual(
+      dataApiGrants,
+      [],
+      `PUBLIC/anon/authenticated must hold no privileges on public objects — revoke them in the migration for: ${JSON.stringify(dataApiGrants)}`
+    )
+
+    const defaultAclGrants = await prisma.$queryRaw<{ objtype: string; grantee: string }[]>`
+      SELECT d.defaclobjtype::text AS objtype, r.rolname AS grantee
+      FROM pg_default_acl d
+      CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+      JOIN pg_roles r ON r.oid = a.grantee
+      WHERE d.defaclnamespace = 'public'::regnamespace
+        AND d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+        AND r.rolname IN ('anon', 'authenticated')
+      ORDER BY 1, 2
+    `
+    assert.deepEqual(
+      defaultAclGrants,
+      [],
+      `default privileges must not re-grant future objects to anon/authenticated: ${JSON.stringify(defaultAclGrants)}`
+    )
+
     console.log("All security regression tests passed.")
   } finally {
     if (userId) {
