@@ -71,6 +71,10 @@ const main = async () => {
       ["missing keys", { endpoint: sub("x").endpoint }],
       ["non-base64 key", { endpoint: sub("x").endpoint, keys: { p256dh: "bad key!", auth: "a" } }],
       ["not a url", { endpoint: "nope", keys: sub("x").keys }],
+      ["non-push-service host", { endpoint: "https://evil.example.com/x", keys: sub("x").keys }],
+      ["lookalike host suffix", { endpoint: "https://fcm.googleapis.com.evil.example/x", keys: sub("x").keys }],
+      ["explicit port", { endpoint: "https://fcm.googleapis.com:8443/fcm/send/x", keys: sub("x").keys }],
+      ["credentials in url", { endpoint: "https://u:p@fcm.googleapis.com/fcm/send/x", keys: sub("x").keys }],
     ] as const) {
       r = await call("/api/push/subscribe", { method: "POST", body, cookie: aCookie })
       r.status === 400 ? pass(`invalid subscription rejected (${label})`) : fail(`invalid ${label}`, r.status)

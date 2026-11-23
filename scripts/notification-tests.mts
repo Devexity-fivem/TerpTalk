@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { notify, notifyMany, invalidateNotificationsForLink, fanoutFollowedContent } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
-import { setPushTransportForTests, settlePendingPush } from "@/lib/web-push"
+import { setPushTransportForTests, settlePendingPush, isPushServiceEndpoint } from "@/lib/web-push"
 
 // Keep usernames ≤20 chars — that is the real username limit, and the
 // mention notifier/renderer only match valid handles.
@@ -197,6 +197,30 @@ async function run() {
     // Push consumes the SAME notification row; the HTTPS sender is
     // swapped for a deterministic fake so the real cleanup / counter /
     // telemetry logic runs in-process.
+
+    // Endpoint allowlist — an endpoint is a URL our server POSTs to, so
+    // only the known push services (plus the .test harness seam) pass.
+    for (const ok of [
+      "https://fcm.googleapis.com/fcm/send/abc",
+      "https://updates.push.services.mozilla.com/wpush/v2/abc",
+      "https://wns2-by3p.notify.windows.com/w/?token=abc",
+      "https://web.push.apple.com/abc",
+      "https://push.example.test/x",
+    ]) {
+      assert.equal(isPushServiceEndpoint(ok), true, `push endpoint accepted: ${ok}`)
+    }
+    for (const bad of [
+      "http://fcm.googleapis.com/fcm/send/abc",
+      "https://evil.example.com/x",
+      "https://fcm.googleapis.com.evil.example/x",
+      "https://evilfcm.googleapis.com/x",
+      "https://fcm.googleapis.com:444/x",
+      "https://a:b@fcm.googleapis.com/x",
+      "not a url",
+    ]) {
+      assert.equal(isPushServiceEndpoint(bad), false, `push endpoint rejected: ${bad}`)
+    }
+
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||= "test-public"
     process.env.VAPID_PRIVATE_KEY ||= "test-private"
     const sent: { endpoint: string; payload: { title: string; url: string; tag: string; category: string } }[] = []
@@ -288,6 +312,18 @@ async function run() {
     await notify({ userId: recip.id, type: "REPLY", title: "flaky", content: "c", actorId: actor.id, groupKey: `push-flaky:${STAMP}` })
     await settlePendingPush()
     assert.equal(await prisma.pushSubscription.count({ where: { endpoint: ep("flaky") } }), 0, "5th consecutive failure removes the subscription")
+
+    // SSRF guard (defense in depth): a pre-fix row whose endpoint is not
+    // a push service is evicted on delivery, never POSTed to.
+    const rogueEndpoint = `https://evil.example.com/${STAMP}/rogue`
+    await prisma.pushSubscription.create({ data: { userId: recip.id, endpoint: rogueEndpoint, p256dh: "BPk3", auth: "a1" } })
+    const sentBeforeRogue = sent.length
+    await notify({ userId: recip.id, type: "REPLY", title: "rogue", content: "c", actorId: actor.id, groupKey: `push-rogue:${STAMP}` })
+    await settlePendingPush()
+    assert.ok(sent.every((s) => s.endpoint !== rogueEndpoint), "transport never receives a non-push-service endpoint")
+    assert.equal(await prisma.pushSubscription.count({ where: { endpoint: rogueEndpoint } }), 0, "invalid endpoint row evicted on delivery")
+    assert.equal(sent.length, sentBeforeRogue + 1, "healthy subscriptions still deliver")
+    assert.equal(sent[sent.length - 1].endpoint, ep("ok"), "the one delivery went to the healthy endpoint")
 
     // Telemetry carries type + category only — no title/content/endpoint.
     const evs = await prisma.pushEvent.findMany({ where: { userId: recip.id } })

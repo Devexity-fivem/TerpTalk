@@ -1,14 +1,16 @@
 import Image from "next/image"
 
-/** Vercel Blob *public* store hosts — the only remote images routed
- *  through next/image (see `images.remotePatterns` in next.config.ts).
+/** True only for URLs on our own public Blob store host — the one
+ *  `images.remotePatterns` allows through next/image (next.config.ts
+ *  derives it from BLOB_STORE_ID and inlines it here as
+ *  NEXT_PUBLIC_BLOB_PUBLIC_HOST). Empty locally/CI, unparseable URLs,
  *  /api/media proxies, private blobs, data:/blob: URIs, and external
  *  attribution hosts all fall back to a plain <img>. */
-const PUBLIC_BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com"
-
 export function isPublicBlobImage(src: string): boolean {
+  const host = process.env.NEXT_PUBLIC_BLOB_PUBLIC_HOST
+  if (!host) return false
   try {
-    return new URL(src).hostname.endsWith(PUBLIC_BLOB_HOST_SUFFIX)
+    return new URL(src).hostname === host
   } catch {
     return false
   }

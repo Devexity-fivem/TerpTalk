@@ -2,8 +2,9 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { checkMaintenance } from "@/lib/maintenance"
+import { rateLimit } from "@/lib/rate-limit"
 import { revalidateTag } from "next/cache"
 import { deleteImages } from "@/lib/blob"
 import { invalidateNotificationsForLink } from "@/lib/notify"
@@ -27,12 +28,22 @@ export async function GET(_request: Request, { params }: Ctx) {
 // deleted member media must not outlive the post. Pure reposts disappear
 // through the canonical predicate; notifications pointing at the moment
 // (comments, mentions, quotes) are swept.
-export async function DELETE(_request: Request, { params }: Ctx) {
+export async function DELETE(request: Request, { params }: Ctx) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
+
+    // Per-author bound before the moment lookup — a limited caller gets
+    // 429 regardless of id existence, so the bucket adds no oracle.
+    // Same shape as comment deletion (moment-comment-del: 30/10min).
+    const rl = await rateLimit(`moment-del:${session.user.id}`, 30, 10 * 60 * 1000)
+    if (!rl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", { userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "moments delete" } })
+      return NextResponse.json({ error: "Slow down." }, { status: 429 })
+    }
+
     const { id } = await params
     const m = await prisma.moment.findUnique({ where: { id }, select: { id: true, authorId: true, deleted: true, repostOfId: true } })
     if (!m || m.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 })

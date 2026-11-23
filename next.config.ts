@@ -19,15 +19,29 @@ const securityHeaders = [
   // headers would intersect and block every nonced script).
 ];
 
+// Our public Blob store's host, derived from BLOB_STORE_ID (store_<id>,
+// set in production). The optimizer must name the account host — a
+// wildcard would proxy ANY Vercel Blob store's images through our
+// image-optimization quota. Empty locally/CI → no remote patterns.
+const publicBlobHost = process.env.BLOB_STORE_ID
+  ? `${process.env.BLOB_STORE_ID.replace(/^store_/, "").toLowerCase()}.public.blob.vercel-storage.com`
+  : "";
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
   images: {
-    // Public Vercel Blob stores only — member media is served through
-    // the auth-aware /api/media proxy, and breeder/affiliate images are
-    // external attribution links; neither goes through the optimizer.
-    remotePatterns: [{ protocol: "https", hostname: "**.public.blob.vercel-storage.com" }],
+    // Only our own public Blob store is optimized (see publicBlobHost).
+    // Member media is served through the auth-aware /api/media proxy,
+    // and breeder/affiliate images are external attribution links;
+    // neither goes through the optimizer.
+    remotePatterns: publicBlobHost
+      ? [{ protocol: "https", hostname: publicBlobHost, pathname: "/**" }]
+      : [],
   },
+  // Inlined into the client bundle at build time so BlobImage applies
+  // the same host check as remotePatterns.
+  env: { NEXT_PUBLIC_BLOB_PUBLIC_HOST: publicBlobHost },
   experimental: {
     serverSourceMaps: false,
   },

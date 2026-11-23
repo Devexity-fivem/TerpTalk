@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { pushConfigured, recordPushEvent } from "@/lib/web-push"
+import { pushConfigured, recordPushEvent, isPushServiceEndpoint } from "@/lib/web-push"
 
 // Web Push subscription storage — owner-scoped. Stores only the three
 // values the Web Push protocol needs (endpoint, p256dh, auth); nothing
@@ -23,11 +23,7 @@ function parseSubscription(body: unknown): { endpoint: string; p256dh: string; a
   if (typeof endpoint !== "string" || typeof p256dh !== "string" || typeof auth !== "string") return null
   if (endpoint.length > 1000 || p256dh.length > 200 || auth.length > 100) return null
   if (!B64URL.test(p256dh) || !B64URL.test(auth)) return null
-  try {
-    if (new URL(endpoint).protocol !== "https:") return null
-  } catch {
-    return null
-  }
+  if (!isPushServiceEndpoint(endpoint)) return null
   return { endpoint, p256dh, auth }
 }
 

@@ -36,6 +36,33 @@ export function pushConfigured(): boolean {
   return !!(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
 }
 
+// An endpoint is a URL OUR servers POST to whenever a push-eligible
+// notification fires — an unchecked one is a blind SSRF / request-
+// reflection primitive. Only the known browser push services are
+// allowed; `.test` hosts (RFC 6761 — never resolves) are accepted
+// outside production so test harnesses can register fake endpoints.
+const PUSH_SERVICE_HOSTS = [
+  "fcm.googleapis.com",          // Chrome/Opera/Samsung/Brave
+  "push.services.mozilla.com",   // Firefox
+  "notify.windows.com",          // Edge (WNS)
+  "push.apple.com",              // Safari
+]
+
+export function isPushServiceEndpoint(endpoint: string): boolean {
+  let url: URL
+  try {
+    url = new URL(endpoint)
+  } catch {
+    return false
+  }
+  if (url.protocol !== "https:") return false
+  if (url.username || url.password) return false
+  if (url.port !== "") return false // no explicit port — 443 only
+  const host = url.hostname.toLowerCase()
+  if (PUSH_SERVICE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return true
+  return process.env.NODE_ENV !== "production" && host.endsWith(".test")
+}
+
 let vapidSet = false
 function ensureVapid(): boolean {
   if (!pushConfigured()) return false
@@ -106,6 +133,16 @@ export async function deliverPush(input: PushInput): Promise<number> {
     })
     if (subs.length === 0) return 0
 
+    // Defense in depth for rows stored before endpoint validation: a
+    // non-push-service endpoint is evicted rather than POSTed to.
+    const invalid = subs.filter((s) => !isPushServiceEndpoint(s.endpoint))
+    if (invalid.length) {
+      await prisma.pushSubscription.deleteMany({ where: { id: { in: invalid.map((s) => s.id) } } }).catch(() => {})
+      await recordPushEvent({ type: "SUBSCRIPTION_REMOVED", userId: input.userId, category: "invalid" })
+    }
+    const deliverable = subs.filter((s) => isPushServiceEndpoint(s.endpoint))
+    if (deliverable.length === 0) return 0
+
     // Title + the same short text already shown in-app — nothing more.
     // `tag` collapses repeats of one logical notification on the device.
     const payload = JSON.stringify({
@@ -118,7 +155,7 @@ export async function deliverPush(input: PushInput): Promise<number> {
 
     let delivered = 0
     await Promise.all(
-      subs.map(async (s) => {
+      deliverable.map(async (s) => {
         try {
           await transport(
             { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },

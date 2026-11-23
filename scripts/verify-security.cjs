@@ -190,6 +190,10 @@ const apiFiles = () => {
     check(`header: ${h}`, cfg.includes(h));
   }
   check("no prod source maps", cfg.includes("productionBrowserSourceMaps: false"));
+  // The image optimizer must only proxy OUR public Blob store — a
+  // wildcard would burn our image quota on anyone's Vercel Blob.
+  check("images: no public blob wildcard", !cfg.includes("**.public.blob.vercel-storage.com"));
+  check("images: remote host derived from BLOB_STORE_ID", cfg.includes("BLOB_STORE_ID"));
 
   // ── 8. Recovery flow invariants (DB level) ──
   check("recover: phrase hash stored (never plaintext)", fs.readFileSync("src/app/api/auth/recover/route.ts", "utf8").includes("recoveryPhraseHash"));
