@@ -57,14 +57,14 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@vercel/analytics": "^2.0.1",
-    "@vercel/blob": "^2.8.1",
-    "@vercel/speed-insights": "^2.0.0",
+    "@vercel/blob": "^2.9.0",
+    "@vercel/speed-insights": "^2.1.0",
     "bcryptjs": "^3.0.3",
     "bip39": "^3.1.2",
     "clsx": "^2.1.1",
     "emoji-picker-react": "^5.1.4",
-    "lucide-react": "^1.63.0",
-    "next": "^16.4.3",
+    "lucide-react": "^1.73.0",
+    "next": "^16.4.6",
     "next-auth": "^4.24.15",
     "prisma": "^6.19.3",
     "profanity-guard": "^1.1.17",
@@ -80,7 +80,9 @@
   "overrides": {
     "cookie": "^0.7.2",
     "@auth/core": "^0.41.3",
-    "deepmerge-ts": "8.0.2"
+    "deepmerge-ts": "8.0.2",
+    "effect": "3.22.4",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -88,9 +90,9 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/web-push": "^3.6.4",
-    "eslint": "^10.12.0",
-    "eslint-config-next": "^16.4.3",
-    "playwright-core": "^1.64.1",
+    "eslint": "^10.15.0",
+    "eslint-config-next": "^16.4.6",
+    "playwright-core": "^1.65.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
