@@ -15,6 +15,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Before creating a new test file, add a section to the canonical domain suite listed in README → Testing. New files only for genuinely new domains.
 - Source-string (`readFileSync(src)`) assertions only for contracts with no behavioral surface; behavior (auth, privacy, ownership, reputation, parsing, TerpBot) must be exercised via HTTP or the real lib function. No route-mirror queries. No `if (fixture) assert` skips.
 - DB suites import `scripts/db-guard.mjs`, clean up everything they create, and keep `Profile.reputation == SUM(ledger)` in fixtures.
+- Gate environment: the dev Supabase project (free tier) pauses after ~7 idle days, which shows up as `ENOTFOUND`; restore it from the dashboard. After bumping `playwright-core`, run `npx playwright-core install chromium`, or `browser-tests` fails at launch. A wrapper timeout skips that suite's cleanup, and leaked `__br-*`/`mv_*` fixtures then fail the next run (feed question board, moments residue check). Re-run timed-out suites standalone against `npm run dev`.
 
 # Schema rules
 
